@@ -5,7 +5,7 @@
 - [Polyglot Persistence Decision Rationale](#polyglot-persistence-decision-rationale)
 - [PostgreSQL Schema-per-Project Design Pattern](#postgresql-schema-per-project-design-pattern)
 - [Why Schemas Over Separate Databases](#why-schemas-over-separate-databases)
-- [Data Flow Diagrams](#data-flow-diagrams)
+- [Data Flow Diagrams](#data-flow-diagrams) — Dashboard, Tick, Screener, Order, Full Platform
 - [Cross-Schema Foreign Key Strategy](#cross-schema-foreign-key-strategy)
 - [Multi-Tenancy Approach](#multi-tenancy-approach)
 - [TimescaleDB Hypertable Strategy](#timescaledb-hypertable-strategy)
@@ -87,6 +87,51 @@ The alternative was to create four separate PostgreSQL databases (`finstack_shar
 ---
 
 ## Data Flow Diagrams
+
+### Dashboard Data Flow (v1.1.0)
+
+The ScreenerX dashboard fetches seven independent data sources from PostgreSQL. Each API call is independently cached in Redis to avoid redundant DB reads on page reload.
+
+```
+Browser: GET /dashboard
+        │
+        ├──▶ GET /market/indices
+        │       SELECT * FROM screenerx.market_indices
+        │       WHERE is_active = true ORDER BY trade_date DESC, sort_order ASC
+        │       Redis cache key: market:indices:{type}  TTL: 60s
+        │
+        ├──▶ GET /market/breadth
+        │       Computed from screenerx.market_data_1d (last 2 trading days)
+        │       COUNT advances / declines / unchanged per symbol
+        │       Redis cache key: market:breadth:{date}  TTL: 60s
+        │
+        ├──▶ GET /market/sectors
+        │       Aggregated from screenerx.symbols + market_data_1d
+        │       Redis cache key: market:sectors:{date}  TTL: 60s
+        │
+        ├──▶ GET /stocks/top-movers
+        │       Derived from screenerx.market_data_1d (last 2 days)
+        │       Redis cache key: market:movers:{exchange}:{date}  TTL: 60s
+        │
+        ├──▶ GET /market/fii-dii
+        │       SELECT * FROM screenerx.fii_dii_activity
+        │       WHERE segment = 'equity' ORDER BY activity_date DESC LIMIT 10
+        │       Redis cache key: market:fii-dii:{date}  TTL: 300s
+        │
+        ├──▶ GET /market/ipos
+        │       SELECT * FROM screenerx.ipos
+        │       WHERE status IN ('upcoming','open','listed') ORDER BY open_date ASC
+        │       Redis cache key: market:ipos  TTL: 300s
+        │
+        └──▶ GET /market/events
+                SELECT * FROM screenerx.economic_events
+                WHERE event_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'
+                Redis cache key: market:events:{date}  TTL: 300s
+```
+
+All seven requests are issued in parallel by TanStack Query on the frontend (`Promise.all`-equivalent). The dashboard renders progressively — sections using cached Redis values respond in < 5ms while DB-computed sections (breadth, sectors) respond in 30–100ms.
+
+---
 
 ### Live Market Tick Flow
 
@@ -340,6 +385,11 @@ SET LOCAL app.current_tenant_id = '<tenant-uuid>';
 | `rankings:gainers:{exchange}:{date}` | Sorted Set | 86400s | Top gainers by change_pct |
 | `rankings:losers:{exchange}:{date}` | Sorted Set | 86400s | Top losers |
 | `rankings:volume:{exchange}:{date}` | Sorted Set | 86400s | Top volume |
+| `market:indices:{type}` | String (JSON) | 60s | Index cards with sparklines (domestic/global/sector/vix) |
+| `market:breadth:{date}` | Hash | 60s | Advances, declines, unchanged counts |
+| `market:fii-dii:{date}` | String (JSON) | 300s | FII/DII daily rows + 5-day net summary |
+| `market:ipos` | String (JSON) | 300s | Upcoming/open/listed IPO list |
+| `market:events:{date}` | String (JSON) | 300s | Economic calendar events for next 30 days |
 
 ### shared domain
 
@@ -472,6 +522,7 @@ The `finstack_admin` role bypasses RLS (it has `BYPASSRLS` privilege) and is use
 - **Read replicas** — all reporting, analytics, and read-heavy API endpoints should be pointed to a streaming replica. The `readonly` role is designed for this.
 - **Materialized views** (`mv_stock_daily_summary`, `mv_sector_performance`, `mv_portfolio_summary`, `mv_top_movers`) are refreshed on a schedule and serve dashboard queries without hitting raw tables.
 - **Redis** absorbs the majority of price read traffic, keeping PostgreSQL free for transactional writes.
+- **Low-cardinality dashboard tables** (`market_indices`, `fii_dii_activity`, `ipos`, `economic_events`) have TTL-backed Redis caches (60–300s). These tables are small (< 1 000 rows each) and change infrequently — Redis avoids repeated full-table scans on every dashboard load.
 
 ### Write scalability
 
