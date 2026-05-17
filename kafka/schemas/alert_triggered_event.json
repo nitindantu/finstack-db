@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AlertTriggeredEvent",
+  "description": "Event published when a user alert condition is met",
+  "type": "object",
+  "required": [
+    "event_id", "event_type", "event_version", "occurred_at",
+    "alert_id", "user_id", "alert_type", "trigger_value", "message"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "const": "alert.triggered"
+    },
+    "event_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "alert_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "symbol_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "ticker": {
+      "type": ["string", "null"]
+    },
+    "alert_type": {
+      "type": "string",
+      "enum": ["price", "volume", "technical", "fundamental", "news", "custom", "earnings", "insider"]
+    },
+    "condition": {
+      "type": "object",
+      "description": "The alert condition object that was evaluated"
+    },
+    "trigger_value": {
+      "type": "number",
+      "description": "The actual value that triggered the alert"
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable notification message"
+    },
+    "notification_channels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["push", "email", "sms", "in_app"]
+      }
+    },
+    "user_email": {
+      "type": "string",
+      "format": "email"
+    },
+    "user_device_tokens": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "FCM/APNs tokens for push notifications"
+    },
+    "triggered_count": {
+      "type": "integer",
+      "description": "How many times this alert has fired (including this event)"
+    }
+  }
+}

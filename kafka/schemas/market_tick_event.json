@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MarketTickEvent",
+  "description": "Real-time market tick event published on every trade or quote update",
+  "type": "object",
+  "required": [
+    "event_id", "event_type", "event_version", "occurred_at",
+    "symbol_id", "exchange_code", "timestamp", "price", "volume"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier (UUID v4)"
+    },
+    "event_type": {
+      "type": "string",
+      "const": "market.tick",
+      "description": "Kafka event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this event was published to Kafka (ISO 8601)"
+    },
+    "symbol_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Internal symbol UUID"
+    },
+    "ticker": {
+      "type": "string",
+      "description": "Exchange ticker symbol, e.g. RELIANCE"
+    },
+    "exchange_code": {
+      "type": "string",
+      "description": "Exchange code, e.g. NSE, BSE"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Exchange-provided trade/quote timestamp"
+    },
+    "price": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Last traded price"
+    },
+    "volume": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Volume of this tick"
+    },
+    "bid": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Best bid price at tick time"
+    },
+    "ask": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Best ask price at tick time"
+    },
+    "bid_size": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "ask_size": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "open": {
+      "type": ["number", "null"],
+      "description": "Day open price"
+    },
+    "high": {
+      "type": ["number", "null"],
+      "description": "Day high price"
+    },
+    "low": {
+      "type": ["number", "null"],
+      "description": "Day low price"
+    },
+    "prev_close": {
+      "type": ["number", "null"],
+      "description": "Previous day closing price"
+    },
+    "change": {
+      "type": ["number", "null"],
+      "description": "Price change vs prev close"
+    },
+    "change_pct": {
+      "type": ["number", "null"],
+      "description": "Percentage change vs prev close"
+    },
+    "trade_condition": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Exchange trade condition codes"
+    },
+    "sequence_no": {
+      "type": ["integer", "null"],
+      "description": "Exchange sequence number for ordering"
+    }
+  }
+}

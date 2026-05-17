@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PortfolioUpdatedEvent",
+  "description": "Published when a portfolio's value or composition changes",
+  "type": "object",
+  "required": [
+    "event_id", "event_type", "event_version", "occurred_at",
+    "portfolio_id", "user_id", "update_type"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "portfolio.transaction_added",
+        "portfolio.position_updated",
+        "portfolio.snapshot_taken",
+        "portfolio.value_refreshed",
+        "portfolio.created",
+        "portfolio.deleted"
+      ]
+    },
+    "event_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "portfolio_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "tenant_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "update_type": {
+      "type": "string",
+      "enum": ["transaction", "price_update", "corporate_action", "manual", "snapshot"]
+    },
+    "total_value": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "invested_value": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "unrealized_pnl": {
+      "type": ["number", "null"]
+    },
+    "day_pnl": {
+      "type": ["number", "null"]
+    },
+    "transaction": {
+      "type": ["object", "null"],
+      "description": "Transaction details if update_type = transaction",
+      "properties": {
+        "transaction_id":   { "type": "string", "format": "uuid" },
+        "transaction_type": { "type": "string" },
+        "symbol_id":        { "type": "string", "format": "uuid" },
+        "ticker":           { "type": "string" },
+        "quantity":         { "type": "number" },
+        "price":            { "type": "number" },
+        "amount":           { "type": "number" },
+        "transaction_date": { "type": "string", "format": "date" }
+      }
+    },
+    "affected_positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "symbol_id":        { "type": "string", "format": "uuid" },
+          "ticker":           { "type": "string" },
+          "quantity":         { "type": "number" },
+          "avg_cost":         { "type": "number" },
+          "current_price":    { "type": "number" },
+          "unrealized_pnl":   { "type": "number" }
+        }
+      }
+    }
+  }
+}

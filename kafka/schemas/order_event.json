@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OrderEvent",
+  "description": "Order lifecycle event published on every order state transition",
+  "type": "object",
+  "required": [
+    "event_id", "event_type", "event_version", "occurred_at",
+    "order_id", "user_id", "symbol_id", "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "order.placed",
+        "order.open",
+        "order.partially_filled",
+        "order.filled",
+        "order.cancelled",
+        "order.rejected",
+        "order.expired",
+        "order.modified"
+      ]
+    },
+    "event_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "order_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "portfolio_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "broker_account_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "symbol_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "ticker": {
+      "type": "string"
+    },
+    "exchange_code": {
+      "type": "string"
+    },
+    "order_type": {
+      "type": "string",
+      "enum": ["market", "limit", "stop", "stop_limit", "bracket", "cover", "trailing_stop"]
+    },
+    "side": {
+      "type": "string",
+      "enum": ["buy", "sell"]
+    },
+    "quantity": {
+      "type": "number",
+      "minimum": 0
+    },
+    "price": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "trigger_price": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "product_type": {
+      "type": "string",
+      "enum": ["intraday", "delivery", "futures", "options", "currency", "commodity"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "open", "partial", "filled", "cancelled", "rejected", "expired", "amo_pending"]
+    },
+    "filled_quantity": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0
+    },
+    "average_fill_price": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "broker_order_id": {
+      "type": ["string", "null"]
+    },
+    "exchange_order_id": {
+      "type": ["string", "null"]
+    },
+    "rejection_reason": {
+      "type": ["string", "null"],
+      "description": "Human-readable reason for rejection"
+    },
+    "charges": {
+      "type": ["object", "null"],
+      "description": "Breakdown of brokerage and exchange charges"
+    },
+    "taxes": {
+      "type": ["object", "null"],
+      "description": "Breakdown of STT, GST, stamp duty"
+    },
+    "previous_status": {
+      "type": ["string", "null"],
+      "description": "Status before this event"
+    }
+  }
+}

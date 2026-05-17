@@ -1,0 +1,229 @@
+{
+  "index_patterns": ["screenerx-stocks-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 3,
+      "number_of_replicas": 1,
+      "analysis": {
+        "analyzer": {
+          "ticker_analyzer": {
+            "type": "custom",
+            "tokenizer": "keyword",
+            "filter": ["uppercase"]
+          },
+          "company_name_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "stop", "asciifolding", "word_delimiter_graph"]
+          },
+          "autocomplete_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "autocomplete_filter"]
+          },
+          "autocomplete_search_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase"]
+          }
+        },
+        "filter": {
+          "autocomplete_filter": {
+            "type": "edge_ngram",
+            "min_gram": 1,
+            "max_gram": 20
+          }
+        }
+      },
+      "index": {
+        "refresh_interval": "5s",
+        "max_result_window": 50000
+      }
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "_source": {
+        "enabled": true
+      },
+      "properties": {
+        "symbol_id": {
+          "type": "keyword",
+          "doc_values": true
+        },
+        "ticker": {
+          "type": "text",
+          "analyzer": "ticker_analyzer",
+          "fields": {
+            "keyword": { "type": "keyword" },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "autocomplete_analyzer",
+              "search_analyzer": "autocomplete_search_analyzer"
+            }
+          }
+        },
+        "symbol_name": {
+          "type": "text",
+          "analyzer": "company_name_analyzer",
+          "fields": {
+            "keyword": { "type": "keyword" },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "autocomplete_analyzer",
+              "search_analyzer": "autocomplete_search_analyzer"
+            }
+          }
+        },
+        "company_name": {
+          "type": "text",
+          "analyzer": "company_name_analyzer",
+          "fields": {
+            "keyword": { "type": "keyword" },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "autocomplete_analyzer",
+              "search_analyzer": "autocomplete_search_analyzer"
+            }
+          }
+        },
+        "isin": {
+          "type": "keyword"
+        },
+        "exchange_code": {
+          "type": "keyword"
+        },
+        "sector": {
+          "type": "keyword",
+          "fields": {
+            "text": { "type": "text", "analyzer": "standard" }
+          }
+        },
+        "industry": {
+          "type": "keyword",
+          "fields": {
+            "text": { "type": "text", "analyzer": "standard" }
+          }
+        },
+        "market_cap_category": {
+          "type": "keyword"
+        },
+        "instrument_type": {
+          "type": "keyword"
+        },
+        "is_active": {
+          "type": "boolean"
+        },
+        "listing_date": {
+          "type": "date",
+          "format": "yyyy-MM-dd"
+        },
+        "about": {
+          "type": "text",
+          "analyzer": "standard",
+          "index_options": "offsets"
+        },
+        "website": {
+          "type": "keyword",
+          "index": false
+        },
+        "founded_year": {
+          "type": "integer"
+        },
+        "employee_count": {
+          "type": "integer"
+        },
+        "headquarters": {
+          "type": "text",
+          "fields": {
+            "keyword": { "type": "keyword" }
+          }
+        },
+        "promoter_names": {
+          "type": "text",
+          "analyzer": "standard",
+          "fields": {
+            "keyword": { "type": "keyword" }
+          }
+        },
+        "last_price": {
+          "type": "double"
+        },
+        "day_change_pct": {
+          "type": "double"
+        },
+        "volume": {
+          "type": "long"
+        },
+        "pe_ratio": {
+          "type": "double"
+        },
+        "pb_ratio": {
+          "type": "double"
+        },
+        "ps_ratio": {
+          "type": "double"
+        },
+        "ev_ebitda": {
+          "type": "double"
+        },
+        "roe": {
+          "type": "double"
+        },
+        "roa": {
+          "type": "double"
+        },
+        "debt_to_equity": {
+          "type": "double"
+        },
+        "current_ratio": {
+          "type": "double"
+        },
+        "dividend_yield": {
+          "type": "double"
+        },
+        "revenue_growth_yoy": {
+          "type": "double"
+        },
+        "earnings_growth_yoy": {
+          "type": "double"
+        },
+        "market_cap_inr": {
+          "type": "double"
+        },
+        "analyst_consensus": {
+          "type": "keyword"
+        },
+        "analyst_target_price": {
+          "type": "double"
+        },
+        "promoter_holding_pct": {
+          "type": "double"
+        },
+        "fii_holding_pct": {
+          "type": "double"
+        },
+        "tags": {
+          "type": "keyword"
+        },
+        "updated_at": {
+          "type": "date",
+          "format": "strict_date_time"
+        },
+        "suggest": {
+          "type": "completion",
+          "analyzer": "simple",
+          "search_analyzer": "simple",
+          "contexts": [
+            {
+              "name": "exchange",
+              "type": "category"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "aliases": {
+    "screenerx-stocks": {}
+  }
+}

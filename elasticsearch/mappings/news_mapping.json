@@ -1,0 +1,132 @@
+{
+  "index_patterns": ["screenerx-news-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 1,
+      "analysis": {
+        "analyzer": {
+          "news_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": [
+              "lowercase",
+              "stop",
+              "asciifolding",
+              "porter_stem"
+            ]
+          },
+          "headline_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": [
+              "lowercase",
+              "asciifolding",
+              "word_delimiter_graph"
+            ]
+          }
+        }
+      },
+      "index": {
+        "refresh_interval": "10s"
+      }
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "article_id": {
+          "type": "keyword"
+        },
+        "headline": {
+          "type": "text",
+          "analyzer": "headline_analyzer",
+          "fields": {
+            "keyword": { "type": "keyword", "ignore_above": 1000 }
+          }
+        },
+        "summary": {
+          "type": "text",
+          "analyzer": "news_analyzer"
+        },
+        "content": {
+          "type": "text",
+          "analyzer": "news_analyzer",
+          "index_options": "offsets",
+          "term_vector": "with_positions_offsets"
+        },
+        "source": {
+          "type": "keyword"
+        },
+        "author": {
+          "type": "keyword",
+          "fields": {
+            "text": { "type": "text", "analyzer": "standard" }
+          }
+        },
+        "url": {
+          "type": "keyword",
+          "index": false,
+          "doc_values": false
+        },
+        "published_at": {
+          "type": "date",
+          "format": "strict_date_time"
+        },
+        "symbols": {
+          "type": "keyword"
+        },
+        "symbol_names": {
+          "type": "text",
+          "analyzer": "standard",
+          "fields": {
+            "keyword": { "type": "keyword" }
+          }
+        },
+        "sectors": {
+          "type": "keyword"
+        },
+        "tags": {
+          "type": "keyword"
+        },
+        "sentiment_score": {
+          "type": "float"
+        },
+        "sentiment_label": {
+          "type": "keyword"
+        },
+        "relevance_score": {
+          "type": "float"
+        },
+        "entity_mentions": {
+          "type": "nested",
+          "properties": {
+            "entity_type": { "type": "keyword" },
+            "entity_name": { "type": "keyword" },
+            "symbol_id":   { "type": "keyword" },
+            "count":       { "type": "integer" },
+            "sentiment":   { "type": "float" }
+          }
+        },
+        "language": {
+          "type": "keyword"
+        },
+        "country": {
+          "type": "keyword"
+        },
+        "is_breaking": {
+          "type": "boolean"
+        },
+        "read_count": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "date",
+          "format": "strict_date_time"
+        }
+      }
+    }
+  },
+  "aliases": {
+    "screenerx-news": {}
+  }
+}
