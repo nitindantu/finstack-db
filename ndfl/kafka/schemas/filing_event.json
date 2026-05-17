@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "filing_event",
+  "title": "FilingEvent",
+  "description": "Domain event for ITR filing lifecycle in the NDFL domain",
+  "type": "object",
+  "required": ["event_id", "event_type", "occurred_at", "user_id", "tax_year_id", "payload"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "filing.started",
+        "filing.submitted",
+        "filing.acknowledged",
+        "filing.defective",
+        "filing.revised",
+        "filing.refund_initiated",
+        "filing.refund_received",
+        "filing.demand_raised"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "tax_year_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "assessment_year": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}$"
+    },
+    "itr_form_type": {
+      "type": "string",
+      "enum": ["ITR1", "ITR2", "ITR3", "ITR4"]
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "acknowledgement_number": { "type": "string" },
+        "filed_at": { "type": "string", "format": "date-time" },
+        "total_income": { "type": "number" },
+        "tax_payable": { "type": "number" },
+        "tax_refund": { "type": "number" },
+        "defect_reason": { "type": "string" },
+        "demand_amount": { "type": "number" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string" },
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "schema_version": { "type": "string", "default": "1.0.0" }
+      }
+    }
+  }
+}

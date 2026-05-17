@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "risk_event",
+  "title": "RiskEvent",
+  "description": "Risk limit breach or warning events in quantnova",
+  "type": "object",
+  "required": ["event_id", "event_type", "occurred_at", "user_id", "payload"],
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "risk.limit_warning",
+        "risk.limit_breached",
+        "risk.limit_cleared",
+        "risk.position_size_exceeded",
+        "risk.drawdown_breached",
+        "risk.var_breached"
+      ]
+    },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "user_id": { "type": "string", "format": "uuid" },
+    "strategy_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "required": ["limit_type", "current_value", "limit_value"],
+      "properties": {
+        "limit_type": { "type": "string" },
+        "current_value": { "type": "number" },
+        "limit_value": { "type": "number" },
+        "breach_percentage": { "type": "number" },
+        "affected_symbol_id": { "type": "string", "format": "uuid" },
+        "action_taken": { "type": "string", "enum": ["none", "order_blocked", "position_squared_off"] }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "schema_version": { "type": "string", "default": "1.0.0" }
+      }
+    }
+  }
+}

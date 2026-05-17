@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "execution_event",
+  "title": "ExecutionEvent",
+  "description": "Order execution confirmation from broker",
+  "type": "object",
+  "required": ["event_id", "event_type", "occurred_at", "order_id", "payload"],
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": {
+      "type": "string",
+      "enum": ["execution.fill", "execution.partial_fill", "execution.rejection", "execution.cancellation"]
+    },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "order_id": { "type": "string", "format": "uuid" },
+    "user_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "required": ["symbol_id", "fill_price", "fill_qty", "side"],
+      "properties": {
+        "symbol_id": { "type": "string", "format": "uuid" },
+        "side": { "type": "string", "enum": ["buy", "sell"] },
+        "fill_price": { "type": "number" },
+        "fill_qty": { "type": "number" },
+        "remaining_qty": { "type": "number" },
+        "broker_order_id": { "type": "string" },
+        "exchange_order_id": { "type": "string" },
+        "rejection_reason": { "type": "string" },
+        "commission": { "type": "number" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "broker": { "type": "string" },
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "schema_version": { "type": "string", "default": "1.0.0" }
+      }
+    }
+  }
+}

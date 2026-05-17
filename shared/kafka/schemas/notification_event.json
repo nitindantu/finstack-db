@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "notification_event",
+  "title": "NotificationEvent",
+  "description": "Event for delivering notifications to users across all domains",
+  "type": "object",
+  "required": ["event_id", "event_type", "occurred_at", "user_id", "payload"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "notification.created",
+        "notification.delivered",
+        "notification.read",
+        "notification.dismissed"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "payload": {
+      "type": "object",
+      "required": ["channel", "title", "body"],
+      "properties": {
+        "notification_id": { "type": "string", "format": "uuid" },
+        "channel": {
+          "type": "string",
+          "enum": ["push", "email", "sms", "in_app", "webhook"]
+        },
+        "title": { "type": "string", "maxLength": 255 },
+        "body": { "type": "string" },
+        "action_url": { "type": "string", "format": "uri" },
+        "image_url": { "type": "string", "format": "uri" },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "normal", "high", "critical"],
+          "default": "normal"
+        },
+        "category": { "type": "string" },
+        "source_domain": {
+          "type": "string",
+          "enum": ["shared", "screenerx", "quantnova", "ndfl"]
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "correlation_id": { "type": "string", "format": "uuid" },
+        "schema_version": { "type": "string", "default": "1.0.0" }
+      }
+    }
+  }
+}
