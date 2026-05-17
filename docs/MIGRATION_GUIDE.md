@@ -118,13 +118,13 @@ export DATABASE_URL="postgresql://neondb_owner:<password>@ep-xxx-yyy.us-east-1.a
 ### Step 3: Run migrations in order
 
 ```bash
-DB_ROOT="/path/to/database"
+DB_ROOT="/path/to/finstack-db"
 
 # 1. Shared schema (extensions, enums, tables, functions, triggers, indexes)
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f "$DB_ROOT/shared/postgres/migrations/001_create_schema.sql"
 
-# 2. ScreenerX schema
+# 2. ScreenerX schema (v1.0.0 — 47 tables)
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f "$DB_ROOT/screenerx/postgres/migrations/001_create_schema.sql"
 
@@ -135,6 +135,29 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 # 4. NDFL schema
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f "$DB_ROOT/ndfl/postgres/migrations/001_create_schema.sql"
+
+# 5. ScreenerX v1.1.0 dashboard tables (market_indices, fii_dii_activity, ipos)
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/080_market_indices.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/081_fii_dii_activity.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/082_ipos.sql"
+```
+
+### Step 4: Load seed data
+
+```bash
+# Core seed data (v1.0.0)
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_002_exchanges.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_003_symbols.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_004_companies.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_005_market_data.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_006_portfolios.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_007_screeners.sql"
+
+# Dashboard seed data (v1.1.0)
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_010_market_indices.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_011_fii_dii.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_012_ipos.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/dml/seed_013_economic_events.sql"
 ```
 
 ### Step 4: Load seed data (optional)

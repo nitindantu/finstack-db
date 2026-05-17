@@ -107,11 +107,11 @@ Exchange Feed → Kafka topic: tick.raw
 | Domain | PostgreSQL Schema | Tables | Description |
 |---|---|---|---|
 | `shared` | `shared` | 13 | Cross-project identity, auth, billing, notifications. Referenced by all other schemas. |
-| `screenerx` | `screenerx` | 47 | Stock screener and portfolio management — markets, fundamentals, screener engine, portfolios, watchlists, alerts, analytics. |
+| `screenerx` | `screenerx` | 50 | Stock screener and portfolio management — markets, fundamentals, screener engine, portfolios, watchlists, alerts, market indices, FII/DII, IPOs, economic calendar, analytics. |
 | `quantnova` | `quantnova` | 23 | Quantitative trading and AI/ML — brokers, orders, executions, positions, strategies, backtests, feature store, ML models, inference logs. |
 | `ndfl` | `ndfl` | 8 | Indian income tax and compliance — tax years, income sources, capital gains, TDS records, Form 26AS, computations, payments, documents. |
 
-**Total: 91 tables across 4 schemas.**
+**Total: 94 tables across 4 schemas.**
 
 ---
 
@@ -218,14 +218,21 @@ database/
 │   │   │   ├── 076_websocket_sessions.sql
 │   │   │   ├── 077_kpi_metrics.sql      # Platform KPIs (hypertable)
 │   │   │   ├── 078_user_activity.sql    # Behavioural events (hypertable)
-│   │   │   └── 079_search_logs.sql
+│   │   │   ├── 079_search_logs.sql
+│   │   │   ├── 080_market_indices.sql   # Index snapshots with sparklines (v1.1.0)
+│   │   │   ├── 081_fii_dii_activity.sql # FII/DII daily activity (v1.1.0)
+│   │   │   └── 082_ipos.sql             # IPO tracker (v1.1.0)
 │   │   ├── dml/
 │   │   │   ├── seed_002_exchanges.sql   # 8 exchanges
 │   │   │   ├── seed_003_symbols.sql     # 20 instruments
 │   │   │   ├── seed_004_companies.sql   # 8 companies with corporate data
 │   │   │   ├── seed_005_market_data.sql # 975 OHLCV records
 │   │   │   ├── seed_006_portfolios.sql  # 5 portfolios with positions
-│   │   │   └── seed_007_screeners.sql   # Sample screener templates
+│   │   │   ├── seed_007_screeners.sql   # Sample screener templates
+│   │   │   ├── seed_010_market_indices.sql  # 15 index snapshots (v1.1.0)
+│   │   │   ├── seed_011_fii_dii.sql     # 10 days FII/DII data (v1.1.0)
+│   │   │   ├── seed_012_ipos.sql        # 7 IPOs (v1.1.0)
+│   │   │   └── seed_013_economic_events.sql # 10 macro events (v1.1.0)
 │   │   ├── indexes/
 │   │   │   ├── idx_symbols.sql
 │   │   │   ├── idx_market_data.sql

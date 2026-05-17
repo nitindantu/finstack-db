@@ -1,11 +1,11 @@
 # Schema Reference
 
-Complete table-by-table reference for all 91 tables across the four PostgreSQL schemas.
+Complete table-by-table reference for all 94 tables across the four PostgreSQL schemas.
 
 ## Table of Contents
 
 - [shared schema (13 tables)](#shared-schema)
-- [screenerx schema (47 tables)](#screenerx-schema)
+- [screenerx schema (50 tables)](#screenerx-schema)
 - [quantnova schema (23 tables)](#quantnova-schema)
 - [ndfl schema (8 tables)](#ndfl-schema)
 
@@ -1135,6 +1135,87 @@ Complete table-by-table reference for all 91 tables across the four PostgreSQL s
 | `response_ms` | INTEGER | Response time in milliseconds |
 | `top_result_id` | UUID | UUID of the first result clicked |
 | `searched_at` | TIMESTAMPTZ NOT NULL | Search timestamp |
+
+---
+
+### screenerx.market_indices
+
+**Purpose:** Daily snapshots of domestic and global market indices with sparkline JSON arrays for dashboard mini-charts. Added in v1.1.0.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID PK | Record identifier |
+| `symbol` | VARCHAR(50) NOT NULL | Index ticker (NIFTY, SENSEX, SPX, etc.) |
+| `name` | VARCHAR(200) NOT NULL | Full display name |
+| `region` | VARCHAR(100) | Geographic region (India / USA / UK / Japan / etc.) |
+| `index_type` | VARCHAR(20) | `domestic` / `global` / `sector` / `vix` |
+| `current_value` | DECIMAL(18,2) NOT NULL | Current index level |
+| `change_value` | DECIMAL(18,2) NOT NULL | Absolute change from previous close |
+| `change_pct` | DECIMAL(8,4) NOT NULL | Percentage change |
+| `prev_close` | DECIMAL(18,2) NOT NULL | Previous session closing value |
+| `open_value` | DECIMAL(18,2) | Opening value for the day |
+| `high_value` | DECIMAL(18,2) | Day high |
+| `low_value` | DECIMAL(18,2) | Day low |
+| `sparkline` | JSONB | Array of recent values (12 points) for mini sparkline chart |
+| `trade_date` | DATE | Snapshot date — unique per (symbol, trade_date) |
+| `is_active` | BOOLEAN | Whether to show in the dashboard |
+| `sort_order` | INTEGER | Display ordering |
+
+**Unique constraint:** `(symbol, trade_date)` — one snapshot per index per day.
+**Indexes:** symbol, trade_date DESC, index_type.
+
+---
+
+### screenerx.fii_dii_activity
+
+**Purpose:** Daily FII (Foreign Institutional Investor) and DII (Domestic Institutional Investor) buy/sell activity in crore INR, used for the FII/DII dashboard panel. Added in v1.1.0.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID PK | Record identifier |
+| `activity_date` | DATE NOT NULL | Trading date |
+| `fii_buy` | DECIMAL(18,2) NOT NULL | FII gross purchases (₹ Crore) |
+| `fii_sell` | DECIMAL(18,2) NOT NULL | FII gross sales (₹ Crore) |
+| `fii_net` | DECIMAL(18,2) | **Generated column** — fii_buy − fii_sell |
+| `dii_buy` | DECIMAL(18,2) NOT NULL | DII gross purchases (₹ Crore) |
+| `dii_sell` | DECIMAL(18,2) NOT NULL | DII gross sales (₹ Crore) |
+| `dii_net` | DECIMAL(18,2) | **Generated column** — dii_buy − dii_sell |
+| `segment` | VARCHAR(20) | `equity` / `debt` / `hybrid` |
+| `source` | VARCHAR(100) | Data source (default: NSE) |
+
+**Unique constraint:** `(activity_date, segment)` — one row per day per segment.
+**Indexes:** activity_date DESC.
+**Note:** `fii_net` and `dii_net` are PostgreSQL `GENERATED ALWAYS AS ... STORED` columns — they cannot be set manually.
+
+---
+
+### screenerx.ipos
+
+**Purpose:** IPO tracker covering the full lifecycle from upcoming announcement through listing. Includes GMP (Grey Market Premium) and subscription data. Added in v1.1.0.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID PK | Record identifier |
+| `company_name` | VARCHAR(500) NOT NULL | Issuer company name |
+| `ticker` | VARCHAR(50) | Post-listing exchange symbol |
+| `exchange` | VARCHAR(20) | Listing exchange (NSE / BSE) |
+| `issue_size_cr` | DECIMAL(18,2) | Total issue size in ₹ Crore |
+| `price_band_low` | DECIMAL(10,2) | Lower bound of price band |
+| `price_band_high` | DECIMAL(10,2) | Upper bound of price band |
+| `lot_size` | INTEGER | Minimum retail application lot |
+| `open_date` | DATE | Subscription opens |
+| `close_date` | DATE | Subscription closes |
+| `allotment_date` | DATE | Allotment announcement date |
+| `listing_date` | DATE | Exchange listing date |
+| `listing_price` | DECIMAL(10,2) | Actual listing price (NULL until listed) |
+| `gmp` | DECIMAL(10,2) | Grey Market Premium in ₹ |
+| `status` | VARCHAR(20) | `upcoming` / `open` / `closed` / `listed` / `withdrawn` |
+| `category` | VARCHAR(50) | Industry/sector category |
+| `registrar` | VARCHAR(200) | Registrar company name |
+| `subscription_times` | DECIMAL(8,2) | Overall subscription multiple (filled post-close) |
+| `min_investment` | DECIMAL(10,2) | Minimum investment amount in ₹ |
+
+**Indexes:** status, open_date, listing_date.
 
 ---
 

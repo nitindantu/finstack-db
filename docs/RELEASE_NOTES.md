@@ -2,6 +2,129 @@
 
 ---
 
+## v1.1.0 — 2026-05-17
+
+### Overview
+
+Dashboard data layer — four new tables and seed data powering the ScreenerX live dashboard. All previously hardcoded dashboard values (indices, FII/DII, IPOs, economic calendar) now read from the database.
+
+---
+
+### New Tables
+
+#### `screenerx.market_indices`
+
+Stores daily snapshots of domestic and global market indices, including a sparkline JSON array for mini-charts.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `symbol` | VARCHAR(50) | Index ticker (NIFTY, SENSEX, SPX, etc.) |
+| `name` | VARCHAR(200) | Display name |
+| `region` | VARCHAR(100) | India / USA / UK / Japan etc. |
+| `index_type` | VARCHAR(20) | `domestic` / `global` / `sector` / `vix` |
+| `current_value` | DECIMAL(18,2) | Latest index level |
+| `change_value` | DECIMAL(18,2) | Absolute change from previous close |
+| `change_pct` | DECIMAL(8,4) | Percentage change |
+| `sparkline` | JSONB | Array of ~12 intraday/recent values for mini-chart |
+| `trade_date` | DATE | Date of snapshot (unique per symbol+date) |
+
+**Seeded with:** 15 indices — NIFTY 50, SENSEX, NIFTY BANK, NIFTY IT, NIFTY MIDCAP 100, INDIA VIX, S&P 500, NASDAQ 100, DOW JONES, FTSE 100, DAX, NIKKEI 225, HANG SENG, SSE Composite, NIFTY SMALLCAP 100.
+
+---
+
+#### `screenerx.fii_dii_activity`
+
+Daily FII (Foreign Institutional Investor) and DII (Domestic Institutional Investor) equity buy/sell figures in crore INR. `fii_net` and `dii_net` are generated columns (buy − sell).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `activity_date` | DATE | Trading date (unique per date+segment) |
+| `fii_buy` | DECIMAL(18,2) | FII gross purchases (₹ Cr) |
+| `fii_sell` | DECIMAL(18,2) | FII gross sales (₹ Cr) |
+| `fii_net` | DECIMAL(18,2) | Generated: fii_buy − fii_sell |
+| `dii_buy` | DECIMAL(18,2) | DII gross purchases (₹ Cr) |
+| `dii_sell` | DECIMAL(18,2) | DII gross sales (₹ Cr) |
+| `dii_net` | DECIMAL(18,2) | Generated: dii_buy − dii_sell |
+| `segment` | VARCHAR(20) | `equity` / `debt` / `hybrid` |
+
+**Seeded with:** 10 days of equity segment data.
+
+---
+
+#### `screenerx.ipos`
+
+IPO tracker covering upcoming, open, closed, and recently listed IPOs with GMP (Grey Market Premium) and subscription details.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `company_name` | VARCHAR(500) | Issuer name |
+| `ticker` | VARCHAR(50) | Post-listing NSE/BSE symbol |
+| `issue_size_cr` | DECIMAL(18,2) | Total issue size in crore INR |
+| `price_band_low/high` | DECIMAL(10,2) | Price band range |
+| `lot_size` | INTEGER | Minimum application lot |
+| `open_date` / `close_date` | DATE | Subscription window |
+| `listing_date` | DATE | Exchange listing date |
+| `listing_price` | DECIMAL(10,2) | Actual listing price (post-listing) |
+| `gmp` | DECIMAL(10,2) | Grey Market Premium in ₹ |
+| `status` | VARCHAR(20) | `upcoming` / `open` / `closed` / `listed` / `withdrawn` |
+| `subscription_times` | DECIMAL(8,2) | Overall subscription multiple |
+
+**Seeded with:** 7 IPOs — Bajaj Housing Finance (open), Ola Electric, FirstCry, Emcure, Niva Bupa (upcoming), Hyundai Motor India, Swiggy (listed).
+
+---
+
+#### `screenerx.economic_events` (existing table — new seed data)
+
+Previously defined in v1.0.0 DDL but not seeded. Now populated with upcoming macro events.
+
+**Seeded with:** 10 events — India CPI, US FOMC Minutes, India WPI, US Retail Sales, ECB Rate Decision, India GDP, US NFP, RBI Policy, US CPI, India IIP.
+
+---
+
+### New API Endpoints (ScreenerX Backend)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/market/indices` | Index cards with sparklines (`?type=domestic\|global\|sector\|vix`) |
+| GET | `/api/v1/market/fii-dii` | FII/DII activity + 5-day net summary (`?days=10`) |
+| GET | `/api/v1/market/ipos` | IPO tracker (`?status=upcoming\|open\|listed`) |
+| GET | `/api/v1/market/events` | Economic calendar (`?days=30`) |
+| GET | `/api/v1/market/breadth` | Advance/decline/unchanged from `market_data_1d` |
+
+---
+
+### New Migration Files
+
+| File | Purpose |
+|------|---------|
+| `screenerx/postgres/ddl/080_market_indices.sql` | market_indices DDL + indexes |
+| `screenerx/postgres/ddl/081_fii_dii_activity.sql` | fii_dii_activity DDL + indexes |
+| `screenerx/postgres/ddl/082_ipos.sql` | ipos DDL + indexes |
+| `screenerx/postgres/dml/seed_010_market_indices.sql` | 15 index snapshots |
+| `screenerx/postgres/dml/seed_011_fii_dii.sql` | 10 days FII/DII data |
+| `screenerx/postgres/dml/seed_012_ipos.sql` | 7 IPOs |
+| `screenerx/postgres/dml/seed_013_economic_events.sql` | 10 economic events |
+
+---
+
+### Updated Database Object Counts
+
+| Category | v1.0.0 | v1.1.0 | Delta |
+|---|---|---|---|
+| Tables | 91 | 94 | +3 |
+| Seeded economic events | 0 | 10 | +10 |
+| Seeded IPOs | 0 | 7 | +7 |
+| Seeded market indices | 0 | 15 | +15 |
+| Seeded FII/DII records | 0 | 10 | +10 |
+
+---
+
+### Breaking Changes
+
+None.
+
+---
+
 ## v1.0.0 — 2026-05-17 (Initial Release)
 
 ### Overview
@@ -196,17 +319,18 @@ None — this is the initial release.
 
 ## Upcoming / Roadmap
 
-### v1.1.0 (planned)
+### v1.2.0 (planned)
 
 - NDFL seed data population
 - `screenerx.option_chains` table for F&O data
-- `screenerx.global_indices` table for cross-market index tracking
+- `screenerx.mutual_fund_nav` table for mutual fund NAV history
 - `quantnova.paper_trading_results` table for paper trading performance attribution
 - Redis Streams integration for replay-capable event log
 
-### v1.2.0 (planned)
+### v1.3.0 (planned)
 
 - Row-Level Security policies documented as explicit SQL in a dedicated `rls/` directory
 - `shared.tenant_configs` table for per-tenant feature flags
 - Elasticsearch index lifecycle management (ILM) policies for the `news` index
 - Kafka Connect configuration files for CDC from PostgreSQL to Elasticsearch
+- Real-time FII/DII feed integration (NSE bulk data API)

@@ -690,6 +690,45 @@ erDiagram
     portfolios ||--o{ rebalancing_rules : "governed_by"
     watchlists ||--o{ watchlist_items : "contains"
     alerts ||--o{ alert_events : "fires"
+
+    market_indices {
+        uuid id PK
+        varchar symbol
+        varchar name
+        varchar region
+        varchar index_type
+        decimal current_value
+        decimal change_value
+        decimal change_pct
+        jsonb sparkline
+        date trade_date
+    }
+
+    fii_dii_activity {
+        uuid id PK
+        date activity_date
+        decimal fii_buy
+        decimal fii_sell
+        decimal fii_net
+        decimal dii_buy
+        decimal dii_sell
+        decimal dii_net
+        varchar segment
+    }
+
+    ipos {
+        uuid id PK
+        varchar company_name
+        varchar ticker
+        decimal issue_size_cr
+        decimal price_band_low
+        decimal price_band_high
+        date open_date
+        date close_date
+        date listing_date
+        decimal gmp
+        varchar status
+    }
 ```
 
 ---
