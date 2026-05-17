@@ -353,61 +353,218 @@ database/
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- `psql` CLI (PostgreSQL client)
-- Bash shell
+| Tool | Purpose | Install |
+|------|---------|---------|
+| Git | Clone repo | [git-scm.com](https://git-scm.com) |
+| `psql` | Run migrations | [PostgreSQL downloads](https://www.postgresql.org/download/) or `brew install libpq` |
+| Docker + Compose | Local full stack | [docker.com](https://www.docker.com/products/docker-desktop) |
+| Python 3 | Alternative migration runner | [python.org](https://www.python.org) |
 
-### 1. Start the infrastructure
+---
+
+### Option A — Neon (Cloud PostgreSQL, recommended for development)
+
+**No Docker needed. Free tier at [neon.tech](https://neon.tech).**
+
+#### 1. Clone the repo
 
 ```bash
-cd "/path/to/database/infra"
-docker compose up -d
-
-# Wait for Postgres to become ready
-docker compose exec postgres pg_isready -U postgres -d finstack
+git clone https://github.com/nitindantu/finstack-db.git
+cd finstack-db
 ```
 
-### 2. Initialize all schemas
+#### 2. Create a Neon database
+
+1. Sign up at [neon.tech](https://neon.tech) — free, no credit card
+2. Create a new project
+3. Copy the connection string — looks like:
+   ```
+   postgresql://user:pass@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require
+   ```
+
+#### 3. Set your connection string
 
 ```bash
-export DATABASE_URL="postgres://postgres:postgres@localhost:5432/finstack"
+export DATABASE_URL="postgresql://user:pass@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require"
+```
+
+#### 4. Run migrations with Python (no psql needed)
+
+```bash
+pip install psycopg2-binary
+
+python3 - <<'EOF'
+import psycopg2, os
+
+conn = psycopg2.connect(os.environ['DATABASE_URL'])
+conn.autocommit = True
+cur = conn.cursor()
+
+# Create schemas
+for schema in ['shared', 'screenerx', 'quantnova', 'ndfl']:
+    cur.execute(f'CREATE SCHEMA IF NOT EXISTS {schema};')
+    print(f'  schema {schema} ready')
+
+# Install extensions
+for ext in ['uuid-ossp', 'pgcrypto', 'pg_trgm', 'btree_gin']:
+    try:
+        cur.execute(f'CREATE EXTENSION IF NOT EXISTS "{ext}";')
+    except: pass
+
+print('Done. Run migration files next.')
+conn.close()
+EOF
+```
+
+#### 5. Run migration files in order
+
+```bash
+# shared domain (always first)
+psql "$DATABASE_URL" -f shared/postgres/ddl/000_extensions.sql
+psql "$DATABASE_URL" -f shared/postgres/ddl/000_enums.sql
+psql "$DATABASE_URL" -f shared/postgres/migrations/001_create_schema.sql
+
+# screenerx domain
+psql "$DATABASE_URL" -f screenerx/postgres/migrations/001_create_schema.sql
+
+# quantnova domain
+psql "$DATABASE_URL" -f quantnova/postgres/migrations/001_create_schema.sql
+
+# ndfl domain
+psql "$DATABASE_URL" -f ndfl/postgres/migrations/001_create_schema.sql
+```
+
+Or run everything at once:
+
+```bash
+chmod +x infra/scripts/init_all.sh
 ./infra/scripts/init_all.sh
 ```
 
-This runs four migration files in dependency order:
-```
-shared  →  screenerx  →  quantnova
-        →  ndfl
-```
-
-### 3. Verify
+#### 6. Load seed data
 
 ```bash
-psql "$DATABASE_URL" -c "\dn"           # list schemas
-psql "$DATABASE_URL" -c "\dt shared.*"  # list shared tables
-psql "$DATABASE_URL" -c "SELECT count(*) FROM shared.users;"
+psql "$DATABASE_URL" -f shared/postgres/dml/seed_001_users.sql
+psql "$DATABASE_URL" -f screenerx/postgres/dml/seed_002_exchanges.sql
+psql "$DATABASE_URL" -f screenerx/postgres/dml/seed_003_symbols.sql
+psql "$DATABASE_URL" -f screenerx/postgres/dml/seed_004_companies.sql
+psql "$DATABASE_URL" -f screenerx/postgres/dml/seed_005_market_data.sql
+psql "$DATABASE_URL" -f screenerx/postgres/dml/seed_006_portfolios.sql
+psql "$DATABASE_URL" -f screenerx/postgres/dml/seed_007_screeners.sql
+psql "$DATABASE_URL" -f quantnova/postgres/dml/seed_008_trading.sql
 ```
 
-### Running individual domains
+#### 7. Verify
 
 ```bash
-# Always run shared first
+psql "$DATABASE_URL" -c "\dn"
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM shared.users;"
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM screenerx.symbols;"
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM screenerx.market_data_1d;"
+```
+
+Expected output:
+```
+ count
+-------
+    15     ← users
+    20     ← symbols
+   975     ← market data rows
+```
+
+---
+
+### Option B — Docker (Local Full Stack)
+
+**Runs PostgreSQL + TimescaleDB + Redis + Elasticsearch + Kafka locally.**
+
+#### 1. Clone and start infrastructure
+
+```bash
+git clone https://github.com/nitindantu/finstack-db.git
+cd finstack-db
+
+# Start all services
+docker compose -f infra/docker-compose.yml up -d
+
+# Wait for PostgreSQL to be ready (takes ~15 seconds)
+docker compose -f infra/docker-compose.yml exec postgres pg_isready -U postgres -d finstack
+```
+
+#### 2. Set connection string
+
+```bash
+export DATABASE_URL="postgres://postgres:postgres@localhost:5432/finstack"
+```
+
+#### 3. Run all migrations
+
+```bash
+chmod +x infra/scripts/*.sh
+./infra/scripts/init_all.sh
+```
+
+#### 4. Enable TimescaleDB hypertables (local only)
+
+```bash
+psql "$DATABASE_URL" -f screenerx/timescaledb/hypertables/create_hypertables.sql
+psql "$DATABASE_URL" -f screenerx/timescaledb/compression/compression_policies.sql
+psql "$DATABASE_URL" -f screenerx/timescaledb/retention/retention_policies.sql
+psql "$DATABASE_URL" -f screenerx/timescaledb/continuous_aggregates/cagg_market_data_5m.sql
+psql "$DATABASE_URL" -f screenerx/timescaledb/continuous_aggregates/cagg_market_data_1h.sql
+```
+
+#### 5. Check running services
+
+```bash
+docker compose -f infra/docker-compose.yml ps
+```
+
+| Service | Port | URL |
+|---------|------|-----|
+| PostgreSQL + TimescaleDB | 5432 | `postgres://postgres:postgres@localhost:5432/finstack` |
+| Redis | 6379 | `redis://localhost:6379` |
+| Elasticsearch | 9200 | http://localhost:9200 |
+| Kafka | 9092 | `localhost:9092` |
+
+#### 6. Stop services
+
+```bash
+docker compose -f infra/docker-compose.yml down
+
+# To also delete all data volumes
+docker compose -f infra/docker-compose.yml down -v
+```
+
+---
+
+### Option C — Run Individual Domains
+
+```bash
+export DATABASE_URL="your_connection_string"
+
+# shared must always run first (other domains depend on shared.users)
 ./infra/scripts/init_shared.sh
 
-# Then individual domains
+# then run whichever domains you need
 ./infra/scripts/init_screenerx.sh
 ./infra/scripts/init_quantnova.sh
 ./infra/scripts/init_ndfl.sh
 ```
 
-### Connecting to Neon (cloud PostgreSQL)
+---
 
-```bash
-export DATABASE_URL="postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=require"
-./infra/scripts/init_all.sh
+### Migration dependency order
+
+```
+shared/          ← must run first (users, auth, billing)
+   │
+   ├── screenerx/    ← references shared.users
+   ├── quantnova/    ← references shared.users + screenerx.symbols
+   └── ndfl/         ← references shared.users
 ```
 
-> **Note:** TimescaleDB continuous aggregates require a self-hosted PostgreSQL instance with the TimescaleDB extension installed. On Neon, all tables are created normally but `create_hypertable()` calls should be skipped or commented out.
+> **TimescaleDB note:** Hypertable features (`create_hypertable`, compression, continuous aggregates) require a self-hosted PostgreSQL with the TimescaleDB extension. On Neon or plain PostgreSQL, all 91 tables are created normally — only skip the `timescaledb/` scripts.
 
 ---
 
