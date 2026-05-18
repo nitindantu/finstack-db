@@ -2,6 +2,35 @@
 
 ---
 
+## v1.3.0 — 2026-05-18
+
+### Overview
+
+AI financial platform tables — 9 new screenerx tables (083–091) and 2 shared tables (014–015) supporting the ScreenerX AI modules.
+
+### New Tables — screenerx schema
+
+| Migration | Table | Purpose |
+|-----------|-------|---------|
+| `083_ai_copilot_sessions.sql` | `screenerx.ai_copilot_sessions` | AI chat session tracking |
+| `084_ai_copilot_messages.sql` | `screenerx.ai_copilot_messages` | Message history with token tracking |
+| `085_risk_profiles.sql` | `screenerx.risk_profiles` | SEBI risk-o-meter user profiles |
+| `086_financial_goals.sql` | `screenerx.financial_goals` | Goal tracking with Monte Carlo results |
+| `087_retirement_plans.sql` | `screenerx.retirement_plans` | Retirement corpus planning |
+| `088_portfolio_analyses.sql` | `screenerx.portfolio_analyses` | Sharpe/Sortino ratio analytics |
+| `089_ai_investment_recommendations.sql` | `screenerx.ai_investment_recommendations` | Personalized AI recommendations |
+| `090_market_intelligence_summaries.sql` | `screenerx.market_intelligence_summaries` | Cached AI market summaries |
+| `091_financial_health_scores.sql` | `screenerx.financial_health_scores` | Composite financial health scores |
+
+### New Tables — shared schema
+
+| Migration | Table | Purpose |
+|-----------|-------|---------|
+| `014_advisor_clients.sql` | `shared.advisor_clients` | Advisor-client relationships |
+| `015_advisor_approvals.sql` | `shared.advisor_approvals` | Human-in-loop approval workflow |
+
+---
+
 ## v1.2.0 — 2026-05-17
 
 ### Overview

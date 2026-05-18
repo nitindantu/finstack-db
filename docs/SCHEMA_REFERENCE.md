@@ -1,13 +1,48 @@
 # Schema Reference
 
-Complete table-by-table reference for all 94 tables across the four PostgreSQL schemas.
+Complete table-by-table reference for all 105 tables across the four PostgreSQL schemas.
 
 ## Table of Contents
 
-- [shared schema (13 tables)](#shared-schema)
-- [screenerx schema (50 tables)](#screenerx-schema)
+- [shared schema (15 tables)](#shared-schema)
+- [screenerx schema (59 tables)](#screenerx-schema)
 - [quantnova schema (23 tables)](#quantnova-schema)
 - [ndfl schema (8 tables)](#ndfl-schema)
+
+## AI Platform Tables (v1.3.0)
+
+### screenerx.ai_copilot_sessions
+Tracks AI chat sessions per user. Stores session type, status, token usage totals, and context snapshots.
+
+### screenerx.ai_copilot_messages
+Individual messages within copilot sessions. Records role, content, token counts, latency, model ID, confidence scores, and tool call metadata.
+
+### screenerx.risk_profiles
+SEBI risk-o-meter compliant user risk profiles. Stores questionnaire responses, risk score (0–100), risk category, recommended asset allocation, and detected behavioral biases.
+
+### screenerx.financial_goals
+User financial goals (retirement, education, house, FIRE, etc.). Includes target amount, monthly contribution, target date, and Monte Carlo simulation results.
+
+### screenerx.retirement_plans
+Retirement corpus planning. Captures current/retirement ages, corpus sources (NPS, EPF, PPF), withdrawal strategy, and 10,000-scenario simulation results.
+
+### screenerx.portfolio_analyses
+Portfolio analytics snapshots including Sharpe ratio, Sortino ratio, max drawdown, sector allocation, and AI-generated insights.
+
+### screenerx.ai_investment_recommendations
+Personalized AI investment recommendations per user. Stores instrument type, recommendation type (buy/sell/hold), conviction level, target allocation, rationale, and confidence score.
+
+### screenerx.market_intelligence_summaries
+AI-generated market summaries with 2-hour cache TTL. Covers daily brief, sector rotation, macro outlook, and earnings summaries.
+
+### screenerx.financial_health_scores
+Composite financial health score (0–100) with grade. Sub-scores: portfolio diversification, goal progress, risk alignment, emergency preparedness.
+
+### shared.advisor_clients
+Advisor-client relationships for SEBI-registered advisor workflows. Tracks assignment date, status, and notes.
+
+### shared.advisor_approvals
+Human-in-loop approval workflow for AI recommendations requiring advisor sign-off before delivery to clients.
 
 ---
 

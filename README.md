@@ -114,7 +114,7 @@ Exchange Feed → Kafka topic: tick.raw
 | `quantnova` | `quantnova` | 23 | Quantitative trading and AI/ML — brokers, orders, executions, positions, strategies, backtests, feature store, ML models, inference logs. |
 | `ndfl` | `ndfl` | 8 | Indian income tax and compliance — tax years, income sources, capital gains, TDS records, Form 26AS, computations, payments, documents. |
 
-**Total: 94 tables across 4 schemas.**
+**Total: 105 tables across 4 schemas** (including 11 new AI platform tables added in v1.3.0).
 
 ---
 
