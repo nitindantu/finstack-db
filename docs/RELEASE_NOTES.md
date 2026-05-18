@@ -2,6 +2,72 @@
 
 ---
 
+## v1.2.0 — 2026-05-17
+
+### Overview
+
+Institution-grade GitHub Actions CI/CD pipeline — automated SQL validation, Neon branch dry-runs on every PR, auto-migration to staging on main push, manual-approval production migration on semver tags, semantic versioning, and contributing conventions.
+
+---
+
+### New GitHub Actions Workflows
+
+| File | Trigger | What it does |
+|------|---------|-------------|
+| `validate.yml` | PR to main/develop | SQL lint (sqlfluff), naming convention check (NNN_*.sql, seed_NNN_*.sql), destructive statement detector, Neon branch dry-run (spins ephemeral branch, runs all migrations, verifies table counts, deletes branch), posts schema diff as PR comment |
+| `migrate-staging.yml` | Push to main (*.sql changed) | Applies all domain migrations + seed data to Neon staging branch; path-filtered so it only fires when SQL files change |
+| `migrate-production.yml` | Push of v*.*.* tag | Applies migrations to Neon production with GitHub Environment manual-approval gate; pre-flight connection check; tags schema with release version; opens urgent GitHub Issue on failure |
+| `release.yml` | Push to main | semantic-release: reads conventional commits, bumps semver, writes CHANGELOG.md, creates GitHub Release + tag |
+
+---
+
+### New Repository Files
+
+| File | Purpose |
+|------|---------|
+| `.github/CODEOWNERS` | Per-schema team ownership; `.github/` locked to core-team; schema dirs owned by respective teams |
+| `.github/dependabot.yml` | Weekly GitHub Actions dependency updates |
+| `.github/pull_request_template.md` | SQL-specific PR checklist: additive-only rule, naming conventions, Prisma sync reminder, docs update confirmation, rollback plan |
+| `.releaserc.json` | semantic-release config: changelog → git commit → GitHub Release |
+| `CONTRIBUTING.md` | Conventional commits guide, migration rules, naming conventions, schema dependency order, branch strategy |
+
+---
+
+### Conventions Enforced by CI
+
+**Commit format (drives semantic-release version bumps):**
+- `feat(scope):` → minor bump (new table/column/index/seed)
+- `fix(scope):` → patch bump (DDL bug fix)
+- `docs(scope):` → no bump
+- `BREAKING CHANGE:` footer → major bump
+
+**Scopes:** shared, screenerx, quantnova, ndfl, timescaledb, redis, kafka, elasticsearch, docs, ci, seed
+
+**Migration safety rules checked automatically:**
+- DDL files must match `NNN_name.sql`
+- Seed files must match `seed_NNN_name.sql`
+- `DROP TABLE`, `DROP COLUMN`, `TRUNCATE` trigger a warning in CI
+
+---
+
+### Required GitHub Secrets
+
+| Secret | Used by |
+|--------|---------|
+| `STAGING_DATABASE_URL` | migrate-staging, validate dry-run |
+| `PRODUCTION_DATABASE_URL` | migrate-production |
+| `NEON_API_KEY` | validate Neon branch dry-run |
+| `NEON_PROJECT_ID` | validate Neon branch dry-run |
+| `STAGING_DB_PASSWORD` | validate Neon branch dry-run |
+
+---
+
+### Breaking Changes
+
+None.
+
+---
+
 ## v1.1.0 — 2026-05-17
 
 ### Overview
@@ -319,18 +385,15 @@ None — this is the initial release.
 
 ## Upcoming / Roadmap
 
-### v1.2.0 (planned)
-
-- NDFL seed data population
-- `screenerx.option_chains` table for F&O data
-- `screenerx.mutual_fund_nav` table for mutual fund NAV history
-- `quantnova.paper_trading_results` table for paper trading performance attribution
-- Redis Streams integration for replay-capable event log
-
 ### v1.3.0 (planned)
 
 - Row-Level Security policies documented as explicit SQL in a dedicated `rls/` directory
 - `shared.tenant_configs` table for per-tenant feature flags
 - Elasticsearch index lifecycle management (ILM) policies for the `news` index
 - Kafka Connect configuration files for CDC from PostgreSQL to Elasticsearch
+
+### v1.4.0 (planned)
+
 - Real-time FII/DII feed integration (NSE bulk data API)
+- Kafka Connect configuration files for CDC from PostgreSQL to Elasticsearch
+- Elasticsearch ILM policies for the news index

@@ -4,6 +4,7 @@ Step-by-step instructions for initialising and managing the finstack-db schemas 
 
 ## Table of Contents
 
+- [Automated Migrations via CI/CD](#automated-migrations-via-cicd)
 - [Prerequisites](#prerequisites)
 - [Environment Setup](#environment-setup)
 - [Running on Neon (Cloud PostgreSQL)](#running-on-neon-cloud-postgresql)
@@ -13,6 +14,34 @@ Step-by-step instructions for initialising and managing the finstack-db schemas 
 - [Loading Seed Data](#loading-seed-data)
 - [Rollback Strategy](#rollback-strategy)
 - [Troubleshooting Common Errors](#troubleshooting-common-errors)
+
+---
+
+## Automated Migrations via CI/CD
+
+As of **v1.2.0**, migrations run automatically through GitHub Actions. You only need to run `psql` manually for local development or one-off tasks.
+
+| Scenario | How migrations run |
+|----------|--------------------|
+| Pull request opened | `validate.yml` spins an ephemeral Neon branch, runs every migration, verifies table counts, posts schema diff comment, then deletes the branch |
+| Merge to `main` (SQL files changed) | `migrate-staging.yml` applies all migrations + seed data to Neon **staging** automatically |
+| Semver tag pushed (`v*.*.*`) | `migrate-production.yml` applies all migrations to Neon **production** after a manual approval in GitHub Environments |
+
+**Required GitHub Secrets** (Settings → Secrets → Actions):
+
+| Secret | Environment |
+|--------|-------------|
+| `STAGING_DATABASE_URL` | Neon staging connection string |
+| `PRODUCTION_DATABASE_URL` | Neon production connection string |
+| `NEON_API_KEY` | Neon API key (for PR dry-run branch creation) |
+| `NEON_PROJECT_ID` | Neon project ID |
+| `STAGING_DB_PASSWORD` | Neon staging DB password (for dry-run branch) |
+
+**To add a new migration and have it deploy automatically:**
+1. Create your `NNN_table_name.sql` file in the correct domain DDL directory
+2. Open a PR → CI dry-runs it on a real Neon branch
+3. Merge to `main` → auto-deploys to staging
+4. Push a semver tag → approve in GitHub → deploys to production
 
 ---
 

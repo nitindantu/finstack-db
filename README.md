@@ -8,6 +8,8 @@
 [![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.13-005571?logo=elasticsearch&logoColor=white)](https://www.elastic.co/)
 [![Kafka](https://img.shields.io/badge/Apache_Kafka-3.6-231F20?logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Validate SQL](https://github.com/nitindantu/finstack-db/actions/workflows/validate.yml/badge.svg)](https://github.com/nitindantu/finstack-db/actions/workflows/validate.yml)
+[![Migrate Staging](https://github.com/nitindantu/finstack-db/actions/workflows/migrate-staging.yml/badge.svg)](https://github.com/nitindantu/finstack-db/actions/workflows/migrate-staging.yml)
 
 ---
 
@@ -22,6 +24,7 @@
 - [Schema Descriptions](#schema-descriptions)
 - [Connecting to the Database](#connecting-to-the-database)
 - [Environment Variables](#environment-variables)
+- [CI/CD Pipeline](#cicd-pipeline)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -595,7 +598,7 @@ The `shared` schema is the foundation of the entire platform. Every user account
 
 ### `screenerx` — Stock Screener & Portfolio
 
-The largest domain (47 tables) covering the full lifecycle of a stock screening and portfolio management application.
+The largest domain (50 tables) covering the full lifecycle of a stock screening and portfolio management application.
 
 **Market Data sub-group:** exchanges, symbols, instrument_master, market_data_ticks (hypertable), market_data_ohlcv (6 timeframe hypertables), order_books (hypertable).
 
@@ -698,14 +701,51 @@ conn = psycopg2.connect(os.environ['DATABASE_URL'])
 
 ---
 
+## CI/CD Pipeline
+
+As of **v1.2.0**, all migrations run automatically through GitHub Actions. Manual `psql` is only needed for local development.
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `validate.yml` | Every PR | SQL lint, naming convention check, destructive statement detector, **Neon branch dry-run** (real ephemeral branch → run all migrations → verify counts → delete branch), schema diff PR comment |
+| `migrate-staging.yml` | Push to `main` (SQL files changed) | Applies all domain migrations + seed data to Neon staging automatically |
+| `migrate-production.yml` | Push of `v*.*.*` tag | Applies migrations to Neon production with **manual approval gate** in GitHub Environments |
+| `release.yml` | Push to `main` | semantic-release: conventional commits → semver bump → `CHANGELOG.md` → GitHub Release + tag |
+
+### Deployment flow
+
+```
+feature branch → PR
+  └── validate.yml: dry-run on ephemeral Neon branch
+        ↓ PR merged to main
+  └── migrate-staging.yml: auto-deploy to staging
+        ↓ staging verified, tag pushed (vX.Y.Z)
+  └── migrate-production.yml: approve in GitHub → deploy to production
+```
+
+### Required GitHub Secrets
+
+| Secret | Used by |
+|--------|---------|
+| `STAGING_DATABASE_URL` | migrate-staging |
+| `PRODUCTION_DATABASE_URL` | migrate-production |
+| `NEON_API_KEY` | validate dry-run |
+| `NEON_PROJECT_ID` | validate dry-run |
+| `STAGING_DB_PASSWORD` | validate dry-run |
+
+---
+
 ## Contributing
 
-1. **Schema changes** — Always add a new DDL file rather than modifying existing ones in production. Follow the `NNN_table_name.sql` numbering convention.
-2. **Migrations** — Update the relevant `migrations/001_create_schema.sql` file to include your new DDL (or add a `002_` file for breaking changes).
-3. **Enums** — Add new enum types to `shared/postgres/ddl/000_enums.sql`. Do not create domain-local enum files (except `ndfl` which uses schema-prefixed types).
-4. **Indexes** — Add new indexes to the appropriate `indexes/idx_*.sql` file, never inline in the DDL file.
-5. **Seeds** — Keep seed data deterministic (fixed UUIDs, idempotent `INSERT ... ON CONFLICT DO NOTHING`).
-6. **Naming conventions** — Tables: `snake_case` plural. Columns: `snake_case`. PKs: always `id UUID`. FKs: `{referenced_table_singular}_id`.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full contribution guide including conventional commits, migration rules, and branch strategy.
+
+**Quick rules:**
+1. **Schema changes** — Always add a new DDL file (`NNN_table_name.sql`) rather than modifying existing ones in production.
+2. **Migrations are additive only** — `CREATE TABLE`, `ADD COLUMN` (nullable/default), `CREATE INDEX CONCURRENTLY`. Never `DROP` in a production migration.
+3. **Enums** — Add to `shared/postgres/ddl/000_enums.sql`. Do not create domain-local enum files.
+4. **Indexes** — Add to the appropriate `indexes/idx_*.sql` file, never inline in DDL.
+5. **Seeds** — Fixed UUIDs, idempotent `INSERT ... ON CONFLICT DO NOTHING`.
+6. **Naming** — Tables: `snake_case` plural. Columns: `snake_case`. PKs: `id UUID`. FKs: `{table_singular}_id`.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for deep-dive design rationale.
 

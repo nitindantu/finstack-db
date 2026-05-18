@@ -14,6 +14,7 @@
 - [Kafka Event Streaming Architecture](#kafka-event-streaming-architecture)
 - [Security: RLS Policies and Schema Isolation](#security-rls-policies-and-schema-isolation)
 - [Scalability Considerations](#scalability-considerations)
+- [CI/CD Architecture](#cicd-architecture)
 
 ---
 
@@ -545,3 +546,97 @@ If a single PostgreSQL instance becomes a bottleneck:
 3. **NDFL** — entirely separate database if compliance isolation is required by regulation.
 
 The schema-per-project design makes this migration path tractable: foreign key references become application-level lookups, and each schema has a clean migration file that can be replayed on a new database.
+
+---
+
+## CI/CD Architecture
+
+finstack-db uses GitHub Actions for all automation. There are no external CI services — everything runs in the GitHub ecosystem.
+
+### Pipeline Overview
+
+```
+Pull Request opened/updated
+        │
+        ├── validate.yml
+        │     ├── SQL lint (sqlfluff, postgres dialect)
+        │     ├── Naming convention check
+        │     │     ├── DDL:  NNN_name.sql
+        │     │     └── Seed: seed_NNN_name.sql
+        │     ├── Destructive statement detector (DROP, TRUNCATE)
+        │     ├── Neon branch dry-run
+        │     │     ├── Spin up ephemeral Neon branch via API
+        │     │     ├── Run all domain migrations in order
+        │     │     ├── Verify table counts
+        │     │     └── Delete branch on completion
+        │     └── Post schema diff comment on PR
+        │
+Push to main (*.sql changed)
+        │
+        └── migrate-staging.yml
+              ├── Run all domain migrations (ON_ERROR_STOP=1)
+              ├── Run DDL patches (080, 081, 082 …)
+              ├── Run seed data (seed_001 through seed_013)
+              └── Verify table counts
+
+Push of v*.*.* tag (after manual approval in GitHub Environment)
+        │
+        └── migrate-production.yml
+              ├── Pre-flight connection check
+              ├── Run all domain migrations
+              ├── Run DDL patches
+              ├── Verify table counts
+              ├── Tag schema with release version
+              └── Open urgent GitHub Issue on failure
+
+Push to main (any file)
+        │
+        └── release.yml
+              └── semantic-release
+                    ├── Analyze conventional commits
+                    ├── Bump semver (feat→minor, fix→patch, BREAKING→major)
+                    ├── Write CHANGELOG.md
+                    ├── Create git tag
+                    └── Create GitHub Release
+```
+
+### Environment Gates
+
+| Environment | Trigger | Approval required |
+|-------------|---------|------------------|
+| staging | Push to `main` with `*.sql` changes | No — auto-deploys |
+| production | Push of `v*.*.*` tag | Yes — requires reviewer in GitHub Environments |
+
+### Migration Safety Guarantees
+
+1. **Neon ephemeral branch** — every PR runs against a real Neon PostgreSQL branch cloned from main. If any migration fails, the PR cannot be merged.
+2. **`ON_ERROR_STOP=1`** — psql stops immediately on the first SQL error; no partial migrations reach staging or production.
+3. **Path filtering** — `migrate-staging.yml` only fires when `.sql` files are touched; documentation-only pushes do not trigger a migration run.
+4. **Destructive statement gate** — CI warns (and can be configured to fail) if `DROP TABLE`, `DROP COLUMN`, or `TRUNCATE` appears in a migration file.
+5. **Post-migration table count** — both staging and production workflows run a table count query after migration and output the result to the workflow log for audit purposes.
+
+### Branch & Tag Strategy
+
+```
+main          → stable, always deployable
+develop       → integration branch (PRs merge here first)
+feature/*     → feature branches, PR against develop
+fix/*         → bug fix branches, PR against develop
+hotfix/*      → critical fixes, PR directly against main
+
+Tags (semver): v1.0.0, v1.1.0, v1.2.0 …
+  └── created automatically by semantic-release on main push
+  └── triggers migrate-production.yml
+```
+
+### Conventional Commits → Version Bumps
+
+| Commit prefix | Version bump | Example |
+|---------------|-------------|---------|
+| `feat(scope):` | minor | `feat(screenerx): add option_chains table` |
+| `fix(scope):` | patch | `fix(screenerx): correct fii_net generated column` |
+| `docs(scope):` | none | `docs(screenerx): update ER diagram` |
+| `chore/ci/test:` | none | `ci: add destructive statement detector` |
+| `BREAKING CHANGE:` footer | major | destructive schema change |
+
+Valid scopes: `shared`, `screenerx`, `quantnova`, `ndfl`, `timescaledb`, `redis`, `kafka`, `elasticsearch`, `docs`, `ci`, `seed`
