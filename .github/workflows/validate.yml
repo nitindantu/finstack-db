@@ -22,7 +22,7 @@ jobs:
     outputs:
       sql_changed: ${{ steps.filter.outputs.sql }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -59,7 +59,7 @@ jobs:
     needs: changed-files
     if: needs.changed-files.outputs.sql_changed == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install sqlfluff
         run: pip install sqlfluff
@@ -80,7 +80,7 @@ jobs:
     needs: changed-files
     if: needs.changed-files.outputs.sql_changed == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check DDL file naming (NNN_*.sql)
         run: |
@@ -141,7 +141,7 @@ jobs:
       github.actor != 'github-actions[bot]'
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install psql
         run: sudo apt-get install -y postgresql-client
@@ -246,7 +246,7 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
