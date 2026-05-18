@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/nitindantu/finstack-db/compare/v1.0.1...v1.0.2) (2026-05-18)
+
+
+### Bug Fixes
+
+* **ci:** skip SQL checks and Neon dry-run for Dependabot PRs ([075677e](https://github.com/nitindantu/finstack-db/commit/075677e691bae93f47bf4dd82c4f06a27150beee))
+
 ## [1.0.1](https://github.com/nitindantu/finstack-db/compare/v1.0.0...v1.0.1) (2026-05-18)
 
 
