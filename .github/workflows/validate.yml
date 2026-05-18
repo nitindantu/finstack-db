@@ -81,16 +81,52 @@ jobs:
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          BRANCH_NAME="pr-${{ github.event.pull_request.number }}-validate"
-          RESPONSE=$(curl -s -X POST \
-            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
-            -H "Authorization: Bearer ${NEON_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"branch\": {\"name\": \"${BRANCH_NAME}\", \"parent_id\": \"$(curl -s 'https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches' -H 'Authorization: Bearer ${NEON_API_KEY}' | python3 -c 'import sys,json; branches=json.load(sys.stdin)[\"branches\"]; print(next(b[\"id\"] for b in branches if b[\"name\"]==\"main\"))')\"}, \"endpoints\": [{\"type\": \"read_write\"}]}")
-          ENDPOINT_HOST=$(echo "$RESPONSE" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["endpoints"][0]["host"])')
-          echo "db_url=postgresql://neondb_owner:${{ secrets.STAGING_DB_PASSWORD }}@${ENDPOINT_HOST}/neondb?sslmode=require" >> "$GITHUB_OUTPUT"
-          echo "branch_id=$(echo $RESPONSE | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"branch\"][\"id\"])')" >> "$GITHUB_OUTPUT"
+          python3 << 'EOF'
+          import json, os, sys, urllib.request, urllib.error
+
+          api_key    = os.environ['NEON_API_KEY']
+          project_id = os.environ['NEON_PROJECT_ID']
+          db_pass    = os.environ['STAGING_DB_PASSWORD']
+          pr_number  = os.environ['PR_NUMBER']
+          branch_name = f"pr-{pr_number}-validate"
+          github_output = os.environ['GITHUB_OUTPUT']
+
+          headers = {
+              'Authorization': f'Bearer {api_key}',
+              'Content-Type': 'application/json',
+          }
+
+          def neon_request(method, path, body=None):
+              url = f'https://console.neon.tech/api/v2/projects/{project_id}{path}'
+              data = json.dumps(body).encode() if body else None
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as resp:
+                  return json.loads(resp.read())
+
+          # Get parent branch id (prefer 'main', fall back to first branch)
+          branches = neon_request('GET', '/branches')['branches']
+          parent = next((b for b in branches if b['name'] == 'main'), branches[0])
+          print(f"Parent branch: {parent['name']} ({parent['id']})")
+
+          # Create ephemeral branch
+          result = neon_request('POST', '/branches', {
+              'branch': {'name': branch_name, 'parent_id': parent['id']},
+              'endpoints': [{'type': 'read_write'}]
+          })
+
+          branch_id = result['branch']['id']
+          host      = result['endpoints'][0]['host']
+          print(f"Created branch: {branch_id}  host: {host}")
+
+          db_url = f"postgresql://neondb_owner:{db_pass}@{host}/neondb?sslmode=require"
+
+          with open(github_output, 'a') as f:
+              f.write(f"db_url={db_url}\n")
+              f.write(f"branch_id={branch_id}\n")
+          EOF
 
       - name: Run all migrations on branch
         env:
