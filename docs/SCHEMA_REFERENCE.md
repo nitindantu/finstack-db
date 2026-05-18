@@ -11,38 +11,263 @@ Complete table-by-table reference for all 105 tables across the four PostgreSQL 
 
 ## AI Platform Tables (v1.3.0)
 
+These 11 tables were added in **v1.3.0** to support the ScreenerX AI Financial Platform. Nine tables live in the `screenerx` schema; two live in the `shared` schema.
+
 ### screenerx.ai_copilot_sessions
-Tracks AI chat sessions per user. Stores session type, status, token usage totals, and context snapshots.
+
+**Purpose:** One record per AI chat session, scoped to a user. Tracks token usage totals and stores a context snapshot (e.g. portfolio summary) that is injected into the Claude system prompt.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique session identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id` | Owning user |
+| `title` | VARCHAR(500) | | Human-readable session title |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT `'active'` | `active` / `archived` / `deleted` |
+| `total_input_tokens` | INTEGER | NOT NULL, DEFAULT 0 | Cumulative Claude input tokens |
+| `total_output_tokens` | INTEGER | NOT NULL, DEFAULT 0 | Cumulative Claude output tokens |
+| `context_snapshot` | JSONB | | Portfolio/profile snapshot injected as system context |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Session creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last activity timestamp |
+
+**Indexes:** `user_id`, `status`, `created_at DESC`
+
+---
 
 ### screenerx.ai_copilot_messages
-Individual messages within copilot sessions. Records role, content, token counts, latency, model ID, confidence scores, and tool call metadata.
+
+**Purpose:** Individual messages within an AI Copilot session. Stores both user and assistant turns, token counts, streaming latency, and any tool-call metadata.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique message identifier |
+| `session_id` | UUID | NOT NULL, FK → `screenerx.ai_copilot_sessions.id` ON DELETE CASCADE | Parent session |
+| `role` | VARCHAR(20) | NOT NULL | `user` / `assistant` / `system` |
+| `content` | TEXT | NOT NULL | Message content (markdown for assistant messages) |
+| `input_tokens` | INTEGER | | Claude input tokens for this turn |
+| `output_tokens` | INTEGER | | Claude output tokens for this turn |
+| `model_id` | VARCHAR(100) | | Claude model ID used (e.g. `claude-opus-4-5-20251101`) |
+| `latency_ms` | INTEGER | | End-to-end streaming latency in milliseconds |
+| `confidence_score` | DECIMAL(5,4) | | Model confidence (0.0–1.0) where reported |
+| `tool_calls` | JSONB | | Tool call metadata if function calling was used |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Message creation timestamp |
+
+**Indexes:** `session_id`, `created_at ASC` (for ordered message fetch)
+
+---
 
 ### screenerx.risk_profiles
-SEBI risk-o-meter compliant user risk profiles. Stores questionnaire responses, risk score (0–100), risk category, recommended asset allocation, and detected behavioral biases.
+
+**Purpose:** SEBI risk-o-meter compliant user risk assessment results. Stores the raw questionnaire responses alongside the computed risk score, category, recommended asset allocation, and any behavioural biases detected.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique profile identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id`, UNIQUE | One profile per user |
+| `questionnaire_responses` | JSONB | NOT NULL | Array of `{ questionId, answer }` objects |
+| `risk_score` | SMALLINT | NOT NULL, CHECK (0–100) | Numeric risk score |
+| `risk_category` | VARCHAR(50) | NOT NULL | `Conservative` / `Moderately Conservative` / `Moderate` / `Moderately Aggressive` / `Aggressive` |
+| `sebi_category` | VARCHAR(50) | NOT NULL | SEBI risk-o-meter label (maps 1:1 to `risk_category`) |
+| `recommended_allocation` | JSONB | NOT NULL | `{ equity, debt, gold, cash }` percentages |
+| `biases_detected` | TEXT[] | | Array of detected behavioural bias codes (e.g. `loss_aversion`, `overconfidence`) |
+| `description` | TEXT | | Narrative description of the risk profile |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Assessment timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**Indexes:** `user_id` (unique), `risk_category`, `created_at`
+
+---
 
 ### screenerx.financial_goals
-User financial goals (retirement, education, house, FIRE, etc.). Includes target amount, monthly contribution, target date, and Monte Carlo simulation results.
+
+**Purpose:** User financial goals with Monte Carlo simulation results. Supports goal types: retirement, education, house purchase, FIRE, vehicle, travel, wedding, emergency, and custom.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique goal identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id` | Owning user |
+| `name` | VARCHAR(500) | NOT NULL | Goal name |
+| `goal_type` | VARCHAR(50) | NOT NULL | `retirement` / `education` / `house` / `fire` / `vehicle` / `travel` / `wedding` / `emergency` / `custom` |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT `'active'` | `active` / `achieved` / `paused` / `cancelled` |
+| `target_amount` | DECIMAL(18,2) | NOT NULL | Target corpus in INR |
+| `current_corpus` | DECIMAL(18,2) | NOT NULL, DEFAULT 0 | Current savings toward goal |
+| `monthly_contribution` | DECIMAL(12,2) | NOT NULL | Monthly SIP toward this goal |
+| `target_date` | DATE | NOT NULL | Goal completion target date |
+| `expected_return` | DECIMAL(6,4) | NOT NULL | Expected annual return (e.g. 0.12 = 12%) |
+| `inflation_rate` | DECIMAL(6,4) | NOT NULL, DEFAULT 0.06 | Expected annual inflation rate |
+| `simulation_result` | JSONB | | Monte Carlo output: `{ probabilityOfSuccess, mean, median, p10, p90, paths }` |
+| `last_simulated_at` | TIMESTAMPTZ | | Timestamp of last simulation run |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Goal creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**Indexes:** `user_id`, `status`, `goal_type`, `target_date`
+
+---
 
 ### screenerx.retirement_plans
-Retirement corpus planning. Captures current/retirement ages, corpus sources (NPS, EPF, PPF), withdrawal strategy, and 10,000-scenario simulation results.
+
+**Purpose:** Retirement corpus planning. Captures current and retirement age, existing corpus sources (NPS, EPF, PPF), expected return assumptions, withdrawal strategy, and the result of a 10,000-path simulation.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique plan identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id`, UNIQUE | One plan per user |
+| `current_age` | SMALLINT | NOT NULL | User's current age in years |
+| `retirement_age` | SMALLINT | NOT NULL | Target retirement age |
+| `life_expectancy` | SMALLINT | NOT NULL, DEFAULT 85 | Planning horizon (age) |
+| `current_monthly_expense` | DECIMAL(12,2) | NOT NULL | Current monthly household expense in INR |
+| `inflation_rate` | DECIMAL(6,4) | NOT NULL, DEFAULT 0.06 | Expected inflation rate |
+| `expected_return_pre` | DECIMAL(6,4) | NOT NULL | Expected annual return pre-retirement |
+| `expected_return_post` | DECIMAL(6,4) | NOT NULL | Expected annual return post-retirement (conservative) |
+| `current_corpus` | DECIMAL(18,2) | NOT NULL, DEFAULT 0 | Total current investable corpus |
+| `monthly_contribution` | DECIMAL(12,2) | NOT NULL, DEFAULT 0 | Monthly investment toward retirement |
+| `nps_corpus` | DECIMAL(18,2) | DEFAULT 0 | Existing NPS corpus |
+| `epf_corpus` | DECIMAL(18,2) | DEFAULT 0 | Existing EPF corpus |
+| `ppf_corpus` | DECIMAL(18,2) | DEFAULT 0 | Existing PPF corpus |
+| `withdrawal_strategy` | VARCHAR(20) | NOT NULL, DEFAULT `'swr'` | `swr` (Safe Withdrawal Rate) / `fixed` / `dynamic` |
+| `required_corpus` | DECIMAL(18,2) | | Computed required retirement corpus |
+| `projected_corpus` | DECIMAL(18,2) | | Projected corpus at retirement from simulation |
+| `probability_of_success` | DECIMAL(6,4) | | % of simulation paths meeting the corpus target |
+| `simulation_result` | JSONB | | Full Monte Carlo output including confidence intervals |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Plan creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**Indexes:** `user_id` (unique)
+
+---
 
 ### screenerx.portfolio_analyses
-Portfolio analytics snapshots including Sharpe ratio, Sortino ratio, max drawdown, sector allocation, and AI-generated insights.
+
+**Purpose:** Point-in-time portfolio analytics snapshots. Stores risk-adjusted return metrics, drawdown statistics, sector allocation, and AI-generated portfolio insights.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique analysis identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id` | Owning user |
+| `portfolio_id` | UUID | FK → `screenerx.portfolios.id` | Optional portfolio reference |
+| `analysis_date` | DATE | NOT NULL | Date of the analysis snapshot |
+| `sharpe_ratio` | DECIMAL(8,4) | | Sharpe ratio (risk-adjusted return) |
+| `sortino_ratio` | DECIMAL(8,4) | | Sortino ratio (downside deviation adjusted) |
+| `max_drawdown` | DECIMAL(8,4) | | Maximum portfolio drawdown |
+| `beta` | DECIMAL(8,4) | | Portfolio beta vs. benchmark (NIFTY 50) |
+| `alpha` | DECIMAL(8,4) | | Jensen's alpha |
+| `volatility` | DECIMAL(8,4) | | Annualized portfolio volatility |
+| `sector_allocation` | JSONB | | `{ sector: pct }` breakdown |
+| `ai_insights` | TEXT | | Claude-generated portfolio commentary |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Analysis creation timestamp |
+
+**Indexes:** `user_id`, `analysis_date DESC`
+
+---
 
 ### screenerx.ai_investment_recommendations
-Personalized AI investment recommendations per user. Stores instrument type, recommendation type (buy/sell/hold), conviction level, target allocation, rationale, and confidence score.
+
+**Purpose:** Personalized AI investment recommendations generated for each user. Each recommendation covers a specific instrument with a conviction level, rationale, and SEBI compliance flag. High-conviction recommendations flow through the `shared.advisor_approvals` workflow before delivery.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique recommendation identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id` | Target user |
+| `instrument_type` | VARCHAR(50) | NOT NULL | `equity` / `mutual_fund` / `etf` / `bond` / `gold` / `reit` |
+| `instrument_name` | VARCHAR(500) | NOT NULL | Fund / stock / ETF display name |
+| `ticker` | VARCHAR(50) | | Exchange ticker (if applicable) |
+| `recommendation_type` | VARCHAR(20) | NOT NULL | `buy` / `sell` / `hold` / `rebalance` / `reduce` / `increase` |
+| `conviction_level` | VARCHAR(10) | NOT NULL | `low` / `medium` / `high` |
+| `target_allocation` | DECIMAL(5,2) | | Recommended portfolio allocation % |
+| `confidence_score` | DECIMAL(5,4) | | Model confidence (0.0–1.0) |
+| `rationale` | TEXT | NOT NULL | SEBI-compliant AI-generated explanation |
+| `requires_advisor_approval` | BOOLEAN | NOT NULL, DEFAULT FALSE | TRUE for high-conviction recs |
+| `advisor_approved` | BOOLEAN | | NULL = pending, TRUE = approved, FALSE = rejected |
+| `sebi_disclaimer_appended` | BOOLEAN | NOT NULL, DEFAULT TRUE | Confirms SEBI disclaimer is present |
+| `valid_until` | TIMESTAMPTZ | | Recommendation expiry |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**Indexes:** `user_id`, `recommendation_type`, `conviction_level`, `valid_until`
+
+---
 
 ### screenerx.market_intelligence_summaries
-AI-generated market summaries with 2-hour cache TTL. Covers daily brief, sector rotation, macro outlook, and earnings summaries.
+
+**Purpose:** Claude-generated market summaries with a 2-hour cache TTL. Covers daily brief, sector rotation, macro outlook, and earnings summaries. The cache prevents excessive Claude API calls for high-traffic scenarios.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique summary identifier |
+| `summary_type` | VARCHAR(50) | NOT NULL | `daily_brief` / `sector_rotation` / `macro_outlook` / `earnings_preview` |
+| `summary_date` | DATE | NOT NULL | Date the summary covers |
+| `content` | TEXT | NOT NULL | AI-generated summary text (markdown) |
+| `model_id` | VARCHAR(100) | | Claude model used |
+| `input_tokens` | INTEGER | | Input tokens consumed |
+| `output_tokens` | INTEGER | | Output tokens consumed |
+| `cache_expires_at` | TIMESTAMPTZ | NOT NULL | Cache expiry timestamp (generated_at + 2 hours) |
+| `sebi_disclaimer` | TEXT | | SEBI disclaimer appended to this summary |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Generation timestamp |
+
+**Unique constraint:** `(summary_type, summary_date)` — one active summary per type per day.
+**Indexes:** `summary_type`, `summary_date`, `cache_expires_at`
+
+---
 
 ### screenerx.financial_health_scores
-Composite financial health score (0–100) with grade. Sub-scores: portfolio diversification, goal progress, risk alignment, emergency preparedness.
+
+**Purpose:** Composite financial health score (0–100) per user, with a letter grade (A–D) and four dimensional sub-scores. Computed from portfolio data, goal progress, risk profile alignment, and emergency fund adequacy.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique score record |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id` | Owning user |
+| `composite_score` | SMALLINT | NOT NULL, CHECK (0–100) | Overall financial health score |
+| `grade` | CHAR(1) | NOT NULL | `A` (85–100), `B` (70–84), `C` (55–69), `D` (<55) |
+| `portfolio_diversification` | SMALLINT | NOT NULL, CHECK (0–100) | Sub-score: asset and sector diversification |
+| `goal_progress` | SMALLINT | NOT NULL, CHECK (0–100) | Sub-score: progress toward active goals |
+| `risk_alignment` | SMALLINT | NOT NULL, CHECK (0–100) | Sub-score: portfolio vs. risk profile alignment |
+| `emergency_preparedness` | SMALLINT | NOT NULL, CHECK (0–100) | Sub-score: emergency fund adequacy (target 6 months) |
+| `recommendations` | JSONB | | Array of actionable AI-generated recommendation strings |
+| `computed_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Computation timestamp |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Row creation timestamp |
+
+**Indexes:** `user_id`, `computed_at DESC`
+
+---
 
 ### shared.advisor_clients
-Advisor-client relationships for SEBI-registered advisor workflows. Tracks assignment date, status, and notes.
+
+**Purpose:** Advisor-client relationship table for SEBI-registered investment adviser (RIA) workflows. Enables an advisor to manage multiple clients and receive AI-generated recommendation approval requests on their behalf.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique relationship identifier |
+| `advisor_id` | UUID | NOT NULL, FK → `shared.users.id` | The SEBI-registered adviser |
+| `client_id` | UUID | NOT NULL, FK → `shared.users.id` | The client user |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT `'active'` | `active` / `inactive` / `terminated` |
+| `assigned_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | When the relationship was established |
+| `notes` | TEXT | | Private advisor notes |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Row creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**Unique constraint:** `(advisor_id, client_id)` — one advisor-client pair.
+**Indexes:** `advisor_id`, `client_id`, `status`
+
+---
 
 ### shared.advisor_approvals
-Human-in-loop approval workflow for AI recommendations requiring advisor sign-off before delivery to clients.
+
+**Purpose:** Human-in-loop approval queue for AI-generated investment recommendations that exceed the conviction threshold. Before a high-conviction recommendation is surfaced to a client, the assigned advisor must review and approve (or reject) it.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique approval record |
+| `recommendation_id` | UUID | NOT NULL, FK → `screenerx.ai_investment_recommendations.id` | The recommendation under review |
+| `advisor_id` | UUID | NOT NULL, FK → `shared.users.id` | Reviewing advisor |
+| `client_id` | UUID | NOT NULL, FK → `shared.users.id` | Client the recommendation is for |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT `'pending'` | `pending` / `approved` / `rejected` |
+| `advisor_notes` | TEXT | | Advisor's comments on approval/rejection |
+| `reviewed_at` | TIMESTAMPTZ | | Timestamp of advisor's decision |
+| `expires_at` | TIMESTAMPTZ | | Approval request expiry (auto-rejected if not actioned) |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Approval request creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last update timestamp |
+
+**Indexes:** `recommendation_id`, `advisor_id`, `client_id`, `status`, `expires_at`
 
 ---
 

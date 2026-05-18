@@ -414,15 +414,10 @@ None — this is the initial release.
 
 ## Upcoming / Roadmap
 
-### v1.3.0 (planned)
+### v1.4.0 (planned)
 
 - Row-Level Security policies documented as explicit SQL in a dedicated `rls/` directory
 - `shared.tenant_configs` table for per-tenant feature flags
 - Elasticsearch index lifecycle management (ILM) policies for the `news` index
 - Kafka Connect configuration files for CDC from PostgreSQL to Elasticsearch
-
-### v1.4.0 (planned)
-
 - Real-time FII/DII feed integration (NSE bulk data API)
-- Kafka Connect configuration files for CDC from PostgreSQL to Elasticsearch
-- Elasticsearch ILM policies for the news index

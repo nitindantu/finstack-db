@@ -9,6 +9,7 @@ All diagrams use [Mermaid](https://mermaid.js.org/) `erDiagram` syntax and can b
 - [QuantNova Domain ER](#quantnova-domain-er)
 - [NDFL Domain ER](#ndfl-domain-er)
 - [Cross-Domain ER](#cross-domain-er)
+- [AI Platform ER (v1.3.0)](#ai-platform-er)
 
 ---
 
@@ -176,6 +177,26 @@ erDiagram
         timestamptz created_at
     }
 
+    advisor_clients {
+        uuid id PK
+        uuid advisor_id FK
+        uuid client_id FK
+        varchar status
+        timestamptz assigned_at
+        text notes
+    }
+
+    advisor_approvals {
+        uuid id PK
+        uuid recommendation_id FK
+        uuid advisor_id FK
+        uuid client_id FK
+        varchar status
+        text advisor_notes
+        timestamptz reviewed_at
+        timestamptz expires_at
+    }
+
     users ||--o{ user_roles : "has"
     users ||--o{ sessions : "has"
     users ||--o{ api_keys : "has"
@@ -185,10 +206,12 @@ erDiagram
     users ||--o{ devices : "registers"
     users ||--o{ oauth_accounts : "links"
     users ||--o{ audit_logs : "generates"
+    users ||--o{ advisor_clients : "advises_as"
     roles ||--o{ user_roles : "assigned_via"
     roles ||--o{ role_permissions : "has"
     permissions ||--o{ role_permissions : "included_in"
     subscriptions ||--o{ billing_transactions : "generates"
+    advisor_clients ||--o{ advisor_approvals : "reviews"
 ```
 
 ---
@@ -1274,4 +1297,162 @@ erDiagram
     shared_users ||--o{ quantnova_ml_models : "builds"
     shared_users ||--o{ ndfl_tax_years : "files"
     screenerx_portfolios ||--o{ quantnova_orders : "executed_in"
+```
+
+---
+
+## AI Platform ER
+
+The AI platform tables added in **v1.3.0** connect to `shared.users` and reference existing `screenerx` tables. The diagram below shows the AI module entities and their relationships.
+
+```mermaid
+erDiagram
+    users {
+        uuid id PK
+        varchar email
+        varchar full_name
+        user_status status
+    }
+
+    ai_copilot_sessions {
+        uuid id PK
+        uuid user_id FK
+        varchar title
+        varchar status
+        int total_input_tokens
+        int total_output_tokens
+        jsonb context_snapshot
+        timestamptz created_at
+    }
+
+    ai_copilot_messages {
+        uuid id PK
+        uuid session_id FK
+        varchar role
+        text content
+        int input_tokens
+        int output_tokens
+        varchar model_id
+        int latency_ms
+        decimal confidence_score
+        timestamptz created_at
+    }
+
+    risk_profiles {
+        uuid id PK
+        uuid user_id FK
+        jsonb questionnaire_responses
+        smallint risk_score
+        varchar risk_category
+        jsonb recommended_allocation
+        text[] biases_detected
+        timestamptz created_at
+    }
+
+    financial_goals {
+        uuid id PK
+        uuid user_id FK
+        varchar name
+        varchar goal_type
+        varchar status
+        decimal target_amount
+        decimal current_corpus
+        decimal monthly_contribution
+        date target_date
+        jsonb simulation_result
+        timestamptz created_at
+    }
+
+    retirement_plans {
+        uuid id PK
+        uuid user_id FK
+        smallint current_age
+        smallint retirement_age
+        decimal current_monthly_expense
+        decimal required_corpus
+        decimal projected_corpus
+        decimal probability_of_success
+        jsonb simulation_result
+        timestamptz created_at
+    }
+
+    portfolio_analyses {
+        uuid id PK
+        uuid user_id FK
+        date analysis_date
+        decimal sharpe_ratio
+        decimal sortino_ratio
+        decimal max_drawdown
+        jsonb sector_allocation
+        text ai_insights
+        timestamptz created_at
+    }
+
+    ai_investment_recommendations {
+        uuid id PK
+        uuid user_id FK
+        varchar instrument_type
+        varchar instrument_name
+        varchar recommendation_type
+        varchar conviction_level
+        decimal confidence_score
+        text rationale
+        boolean requires_advisor_approval
+        boolean advisor_approved
+        timestamptz valid_until
+    }
+
+    market_intelligence_summaries {
+        uuid id PK
+        varchar summary_type
+        date summary_date
+        text content
+        varchar model_id
+        timestamptz cache_expires_at
+        timestamptz created_at
+    }
+
+    financial_health_scores {
+        uuid id PK
+        uuid user_id FK
+        smallint composite_score
+        char grade
+        smallint portfolio_diversification
+        smallint goal_progress
+        smallint risk_alignment
+        smallint emergency_preparedness
+        jsonb recommendations
+        timestamptz computed_at
+    }
+
+    advisor_clients {
+        uuid id PK
+        uuid advisor_id FK
+        uuid client_id FK
+        varchar status
+        timestamptz assigned_at
+    }
+
+    advisor_approvals {
+        uuid id PK
+        uuid recommendation_id FK
+        uuid advisor_id FK
+        uuid client_id FK
+        varchar status
+        text advisor_notes
+        timestamptz reviewed_at
+        timestamptz expires_at
+    }
+
+    users ||--o{ ai_copilot_sessions : "has"
+    users ||--o| risk_profiles : "has"
+    users ||--o{ financial_goals : "sets"
+    users ||--o| retirement_plans : "has"
+    users ||--o{ portfolio_analyses : "analyzed_in"
+    users ||--o{ ai_investment_recommendations : "receives"
+    users ||--o{ financial_health_scores : "scored_in"
+    users ||--o{ advisor_clients : "is_client_of"
+    ai_copilot_sessions ||--o{ ai_copilot_messages : "contains"
+    ai_investment_recommendations ||--o{ advisor_approvals : "reviewed_via"
+    advisor_clients ||--o{ advisor_approvals : "approves"
 ```

@@ -169,6 +169,21 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/080_market_indices.sql"
 psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/081_fii_dii_activity.sql"
 psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/082_ipos.sql"
+
+# 6. ScreenerX v1.3.0 AI platform tables
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/083_ai_copilot_sessions.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/084_ai_copilot_messages.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/085_risk_profiles.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/086_financial_goals.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/087_retirement_plans.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/088_portfolio_analyses.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/089_ai_investment_recommendations.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/090_market_intelligence_summaries.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/screenerx/postgres/ddl/091_financial_health_scores.sql"
+
+# 7. Shared v1.3.0 advisor workflow tables
+psql "$DATABASE_URL" -f "$DB_ROOT/shared/postgres/ddl/014_advisor_clients.sql"
+psql "$DATABASE_URL" -f "$DB_ROOT/shared/postgres/ddl/015_advisor_approvals.sql"
 ```
 
 ### Step 4: Load seed data
@@ -208,15 +223,15 @@ psql "$DATABASE_URL" -f "$DB_ROOT/quantnova/postgres/dml/seed_008_trading.sql"
 psql "$DATABASE_URL" -c "SELECT table_schema, count(*) AS tables FROM information_schema.tables WHERE table_schema IN ('shared','screenerx','quantnova','ndfl') GROUP BY 1 ORDER BY 1;"
 ```
 
-Expected output:
+Expected output (v1.3.0):
 
 ```
  table_schema | tables
 --------------+--------
  ndfl         |      8
  quantnova    |     23
- screenerx    |     47
- shared       |     13
+ screenerx    |     59
+ shared       |     15
 ```
 
 ---

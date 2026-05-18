@@ -23,7 +23,7 @@ All commits must follow [Conventional Commits](https://www.conventionalcommits.o
 
 ### Scopes
 
-Use one of: `shared`, `screenerx`, `quantnova`, `ndfl`, `timescaledb`, `redis`, `kafka`, `elasticsearch`, `docs`, `ci`, `seed`
+Use one of: `shared`, `screenerx`, `quantnova`, `ndfl`, `timescaledb`, `redis`, `kafka`, `elasticsearch`, `docs`, `ci`, `seed`, `ai`
 
 ### Examples
 

@@ -10,6 +10,7 @@ Redis keys in the `screenerx` domain cover:
 - Alert cooldown state
 - Market rankings (top gainers, losers, volume)
 - WebSocket pub/sub channels
+- AI platform caches: market intelligence summaries (2hr TTL), recommendation refresh rate-limiting (v1.3.0)
 
 All keys follow: `{namespace}:{entity_type}:{identifier}`
 
@@ -155,4 +156,39 @@ Message: JSON {"symbol_id": "...", "price": 2958.30, "volume": 500, "timestamp":
 ```
 Channel: portfolio:{portfolio_id}
 Message: JSON {"portfolio_id": "...", "total_value": 2345678.50, "day_pnl": 12450.00}
+```
+
+---
+
+## 8. AI Platform (v1.3.0)
+
+### Market Intelligence Summary Cache
+```
+Key:     ai:market-intelligence:{summary_type}:{date}
+Type:    String (JSON)
+Value:   {"content": "...", "model_id": "...", "generatedAt": "...", "disclaimer": "..."}
+TTL:     7200 seconds (2 hours)
+Example: ai:market-intelligence:daily_brief:2026-05-18
+         ai:market-intelligence:sector_rotation:2026-05-18
+         ai:market-intelligence:macro_outlook:2026-05-18
+Note:    Keyed by type + date. After TTL expiry, next request triggers fresh Claude generation.
+```
+
+### Recommendation Refresh Rate Limit
+```
+Key:     ai:rec-refresh-limit:{user_id}
+Type:    String ("1")
+TTL:     3600 seconds (1 hour)
+Note:    Set when a user triggers /recommendations/refresh. Prevents excessive API usage.
+Example: ai:rec-refresh-limit:a1b2c3d4-0001-4000-8000-000000000001
+```
+
+### Financial Health Score Cache
+```
+Key:     ai:health-score:{user_id}
+Type:    String (JSON)
+Value:   {"compositeScore": 74, "grade": "B", "subScores": {...}, "computedAt": "..."}
+TTL:     3600 seconds (1 hour)
+Note:    Invalidated immediately when portfolio, goals, or risk profile changes.
+Example: ai:health-score:a1b2c3d4-0001-4000-8000-000000000001
 ```

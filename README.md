@@ -109,8 +109,8 @@ Exchange Feed → Kafka topic: tick.raw
 
 | Domain | PostgreSQL Schema | Tables | Description |
 |---|---|---|---|
-| `shared` | `shared` | 13 | Cross-project identity, auth, billing, notifications. Referenced by all other schemas. |
-| `screenerx` | `screenerx` | 50 | Stock screener and portfolio management — markets, fundamentals, screener engine, portfolios, watchlists, alerts, market indices, FII/DII, IPOs, economic calendar, analytics. |
+| `shared` | `shared` | 15 | Cross-project identity, auth, billing, notifications, and (v1.3.0) advisor workflow tables. Referenced by all other schemas. |
+| `screenerx` | `screenerx` | 59 | Stock screener and portfolio management — markets, fundamentals, screener engine, portfolios, watchlists, alerts, market indices, FII/DII, IPOs, economic calendar, analytics, and (v1.3.0) 9 AI platform tables. |
 | `quantnova` | `quantnova` | 23 | Quantitative trading and AI/ML — brokers, orders, executions, positions, strategies, backtests, feature store, ML models, inference logs. |
 | `ndfl` | `ndfl` | 8 | Indian income tax and compliance — tax years, income sources, capital gains, TDS records, Form 26AS, computations, payments, documents. |
 
@@ -154,7 +154,9 @@ database/
 │   │   │   ├── 010_user_preferences.sql # Per-user settings (JSONB)
 │   │   │   ├── 011_devices.sql          # Push notification device tokens
 │   │   │   ├── 012_oauth_accounts.sql   # Google/GitHub/etc. OAuth links
-│   │   │   └── 013_notifications.sql    # In-app & push notifications
+│   │   │   ├── 013_notifications.sql    # In-app & push notifications
+│   │   │   ├── 014_advisor_clients.sql  # Advisor-client relationships (v1.3.0)
+│   │   │   └── 015_advisor_approvals.sql # Human-in-loop approval workflow (v1.3.0)
 │   │   ├── dml/
 │   │   │   └── seed_001_users.sql       # 15 seed users across all tenants
 │   │   ├── indexes/
@@ -224,7 +226,16 @@ database/
 │   │   │   ├── 079_search_logs.sql
 │   │   │   ├── 080_market_indices.sql   # Index snapshots with sparklines (v1.1.0)
 │   │   │   ├── 081_fii_dii_activity.sql # FII/DII daily activity (v1.1.0)
-│   │   │   └── 082_ipos.sql             # IPO tracker (v1.1.0)
+│   │   │   ├── 082_ipos.sql             # IPO tracker (v1.1.0)
+│   │   │   ├── 083_ai_copilot_sessions.sql      # AI chat sessions (v1.3.0)
+│   │   │   ├── 084_ai_copilot_messages.sql      # Chat messages with token tracking (v1.3.0)
+│   │   │   ├── 085_risk_profiles.sql            # SEBI risk-o-meter profiles (v1.3.0)
+│   │   │   ├── 086_financial_goals.sql          # Goal planning with Monte Carlo (v1.3.0)
+│   │   │   ├── 087_retirement_plans.sql         # Retirement corpus planning (v1.3.0)
+│   │   │   ├── 088_portfolio_analyses.sql       # Sharpe/Sortino analytics (v1.3.0)
+│   │   │   ├── 089_ai_investment_recommendations.sql # Personalized AI recs (v1.3.0)
+│   │   │   ├── 090_market_intelligence_summaries.sql # Cached AI summaries (v1.3.0)
+│   │   │   └── 091_financial_health_scores.sql  # Composite health scores (v1.3.0)
 │   │   ├── dml/
 │   │   │   ├── seed_002_exchanges.sql   # 8 exchanges
 │   │   │   ├── seed_003_symbols.sql     # 20 instruments
@@ -574,7 +585,7 @@ shared/          ← must run first (users, auth, billing)
    └── ndfl/         ← references shared.users
 ```
 
-> **TimescaleDB note:** Hypertable features (`create_hypertable`, compression, continuous aggregates) require a self-hosted PostgreSQL with the TimescaleDB extension. On Neon or plain PostgreSQL, all 91 tables are created normally — only skip the `timescaledb/` scripts.
+> **TimescaleDB note:** Hypertable features (`create_hypertable`, compression, continuous aggregates) require a self-hosted PostgreSQL with the TimescaleDB extension. On Neon or plain PostgreSQL, all 105 tables are created normally — only skip the `timescaledb/` scripts.
 
 ---
 
@@ -595,10 +606,12 @@ The `shared` schema is the foundation of the entire platform. Every user account
 - **devices** — Push notification device tokens (iOS / Android / Web).
 - **oauth_accounts** — OAuth provider links (Google, GitHub, Facebook, Twitter, LinkedIn).
 - **notifications** — In-app, push, email, and SMS notification records.
+- **advisor_clients** (v1.3.0) — Advisor-client relationships for SEBI-registered advisor workflows.
+- **advisor_approvals** (v1.3.0) — Human-in-loop approval queue for AI investment recommendations above configurable conviction threshold.
 
 ### `screenerx` — Stock Screener & Portfolio
 
-The largest domain (50 tables) covering the full lifecycle of a stock screening and portfolio management application.
+The largest domain (59 tables as of v1.3.0) covering the full lifecycle of a stock screening and portfolio management application.
 
 **Market Data sub-group:** exchanges, symbols, instrument_master, market_data_ticks (hypertable), market_data_ohlcv (6 timeframe hypertables), order_books (hypertable).
 
@@ -617,6 +630,10 @@ The largest domain (50 tables) covering the full lifecycle of a stock screening 
 **Alerts:** alerts, alert_events (hypertable).
 
 **Analytics:** websocket_sessions, kpi_metrics (hypertable), user_activity (hypertable), search_logs.
+
+**Dashboard sub-group (v1.1.0):** market_indices, fii_dii_activity, ipos.
+
+**AI Platform sub-group (v1.3.0):** ai_copilot_sessions, ai_copilot_messages, risk_profiles, financial_goals, retirement_plans, portfolio_analyses, ai_investment_recommendations, market_intelligence_summaries, financial_health_scores.
 
 ### `quantnova` — Quantitative Trading & AI/ML
 
