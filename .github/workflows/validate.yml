@@ -11,64 +11,134 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ------------------------------------------------------------------
+  # Detect whether this PR/push actually touches any SQL files.
+  # All jobs below use this output to skip gracefully when it's a
+  # Dependabot / docs-only / GitHub Actions-only change.
+  # ------------------------------------------------------------------
+  changed-files:
+    name: Detect Changed Files
+    runs-on: ubuntu-latest
+    outputs:
+      sql_changed: ${{ steps.filter.outputs.sql }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for SQL file changes
+        id: filter
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          # Fall back to comparing against HEAD~1 on direct pushes
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="HEAD~1"
+          fi
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null | grep '\.sql$' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "sql=true" >> "$GITHUB_OUTPUT"
+            echo "SQL files changed:"
+            echo "$CHANGED"
+          else
+            echo "sql=false" >> "$GITHUB_OUTPUT"
+            echo "No SQL files changed — skipping SQL-specific checks."
+          fi
+
+  # ------------------------------------------------------------------
+  # SQL lint — only runs when SQL files changed
+  # ------------------------------------------------------------------
   sql-syntax:
     name: SQL Syntax Check
     runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.sql_changed == 'true'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pgFormatter / sqlfluff
+      - name: Install sqlfluff
         run: pip install sqlfluff
 
-      - name: Lint SQL files
+      - name: Lint changed SQL files
         run: |
-          find . -name "*.sql" -not -path "./.git/*" | while read f; do
+          find . -name "*.sql" -not -path "./.git/*" | while read -r f; do
             sqlfluff lint "$f" --dialect postgres --rules L001,L002,L003,L010,L011,L014 || true
           done
 
+  # ------------------------------------------------------------------
+  # Naming convention + destructive statement check
+  # Only runs when SQL files changed
+  # ------------------------------------------------------------------
   migration-order:
     name: Migration Order & Naming Convention
     runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.sql_changed == 'true'
     steps:
       - uses: actions/checkout@v4
 
       - name: Check DDL file naming (NNN_*.sql)
         run: |
-          FAIL=0
-          find . -path "*/postgres/ddl/*.sql" | while read f; do
+          BAD=$(find . -path "*/postgres/ddl/*.sql" | while read -r f; do
             base=$(basename "$f")
             if ! [[ "$base" =~ ^[0-9]{3}_.+\.sql$ ]]; then
-              echo "ERR: DDL file does not follow NNN_name.sql convention: $f"
-              FAIL=1
+              echo "ERR: $f does not follow NNN_name.sql convention"
             fi
-          done
-          exit $FAIL
+          done)
+          if [ -n "$BAD" ]; then
+            echo "$BAD"
+            exit 1
+          fi
+          echo "All DDL files pass naming check."
 
       - name: Check seed file naming (seed_NNN_*.sql)
         run: |
-          FAIL=0
-          find . -path "*/postgres/dml/seed_*.sql" | while read f; do
+          BAD=$(find . -path "*/postgres/dml/seed_*.sql" | while read -r f; do
             base=$(basename "$f")
             if ! [[ "$base" =~ ^seed_[0-9]{3}_.+\.sql$ ]]; then
-              echo "ERR: Seed file does not follow seed_NNN_name.sql convention: $f"
-              FAIL=1
+              echo "ERR: $f does not follow seed_NNN_name.sql convention"
             fi
-          done
-          exit $FAIL
+          done)
+          if [ -n "$BAD" ]; then
+            echo "$BAD"
+            exit 1
+          fi
+          echo "All seed files pass naming check."
 
-      - name: Check for destructive statements in migrations
+      - name: Check for destructive statements
         run: |
-          FAIL=0
-          for f in $(find . -path "*/postgres/ddl/*.sql" -o -path "*/postgres/migrations/*.sql"); do
-            if grep -qiE '^\s*(DROP\s+(TABLE|COLUMN|SCHEMA|TYPE)|ALTER\s+TABLE.+DROP|TRUNCATE)' "$f"; then
-              echo "WARN: Potentially destructive statement found in $f"
-            fi
-          done
+          FOUND=$(grep -rniE '^\s*(DROP\s+(TABLE|COLUMN|SCHEMA|TYPE)|ALTER\s+TABLE.+DROP\s+COLUMN|TRUNCATE)' \
+            --include="*.sql" \
+            shared/postgres/ddl/ screenerx/postgres/ddl/ \
+            quantnova/postgres/ddl/ ndfl/postgres/ddl/ \
+            shared/postgres/migrations/ screenerx/postgres/migrations/ \
+            quantnova/postgres/migrations/ ndfl/postgres/migrations/ \
+            2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "⚠️  Destructive SQL statements detected — review carefully before merging:"
+            echo "$FOUND"
+          else
+            echo "No destructive statements found."
+          fi
 
+  # ------------------------------------------------------------------
+  # Neon branch dry-run — only on PRs with SQL changes, never for
+  # Dependabot (it cannot access secrets) or bot actors
+  # ------------------------------------------------------------------
   dry-run-neon:
     name: Migration Dry Run (Neon Branch)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: changed-files
+    if: |
+      github.event_name == 'pull_request' &&
+      needs.changed-files.outputs.sql_changed == 'true' &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
     environment: staging
     steps:
       - uses: actions/checkout@v4
@@ -85,13 +155,13 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           python3 << 'EOF'
-          import json, os, sys, urllib.request, urllib.error
+          import json, os, urllib.request, urllib.error
 
-          api_key    = os.environ['NEON_API_KEY']
-          project_id = os.environ['NEON_PROJECT_ID']
-          db_pass    = os.environ['STAGING_DB_PASSWORD']
-          pr_number  = os.environ['PR_NUMBER']
-          branch_name = f"pr-{pr_number}-validate"
+          api_key       = os.environ['NEON_API_KEY']
+          project_id    = os.environ['NEON_PROJECT_ID']
+          db_pass       = os.environ['STAGING_DB_PASSWORD']
+          pr_number     = os.environ['PR_NUMBER']
+          branch_name   = f"pr-{pr_number}-validate"
           github_output = os.environ['GITHUB_OUTPUT']
 
           headers = {
@@ -100,29 +170,27 @@ jobs:
           }
 
           def neon_request(method, path, body=None):
-              url = f'https://console.neon.tech/api/v2/projects/{project_id}{path}'
+              url  = f'https://console.neon.tech/api/v2/projects/{project_id}{path}'
               data = json.dumps(body).encode() if body else None
-              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              req  = urllib.request.Request(url, data=data, headers=headers, method=method)
               with urllib.request.urlopen(req) as resp:
                   return json.loads(resp.read())
 
-          # Get parent branch id (prefer 'main', fall back to first branch)
+          # Get parent branch (prefer 'main', fall back to first)
           branches = neon_request('GET', '/branches')['branches']
-          parent = next((b for b in branches if b['name'] == 'main'), branches[0])
+          parent   = next((b for b in branches if b['name'] == 'main'), branches[0])
           print(f"Parent branch: {parent['name']} ({parent['id']})")
 
           # Create ephemeral branch
-          result = neon_request('POST', '/branches', {
-              'branch': {'name': branch_name, 'parent_id': parent['id']},
-              'endpoints': [{'type': 'read_write'}]
+          result    = neon_request('POST', '/branches', {
+              'branch':    {'name': branch_name, 'parent_id': parent['id']},
+              'endpoints': [{'type': 'read_write'}],
           })
-
           branch_id = result['branch']['id']
           host      = result['endpoints'][0]['host']
           print(f"Created branch: {branch_id}  host: {host}")
 
           db_url = f"postgresql://neondb_owner:{db_pass}@{host}/neondb?sslmode=require"
-
           with open(github_output, 'a') as f:
               f.write(f"db_url={db_url}\n")
               f.write(f"branch_id={branch_id}\n")
@@ -132,14 +200,13 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
         run: |
-          DB="$DATABASE_URL"
-          psql "$DB" -v ON_ERROR_STOP=1 -f shared/postgres/migrations/001_create_schema.sql
-          psql "$DB" -v ON_ERROR_STOP=1 -f screenerx/postgres/migrations/001_create_schema.sql
-          psql "$DB" -v ON_ERROR_STOP=1 -f quantnova/postgres/migrations/001_create_schema.sql
-          psql "$DB" -v ON_ERROR_STOP=1 -f ndfl/postgres/migrations/001_create_schema.sql
-          psql "$DB" -f screenerx/postgres/ddl/080_market_indices.sql
-          psql "$DB" -f screenerx/postgres/ddl/081_fii_dii_activity.sql
-          psql "$DB" -f screenerx/postgres/ddl/082_ipos.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f shared/postgres/migrations/001_create_schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f screenerx/postgres/migrations/001_create_schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f quantnova/postgres/migrations/001_create_schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ndfl/postgres/migrations/001_create_schema.sql
+          psql "$DATABASE_URL" -f screenerx/postgres/ddl/080_market_indices.sql
+          psql "$DATABASE_URL" -f screenerx/postgres/ddl/081_fii_dii_activity.sql
+          psql "$DATABASE_URL" -f screenerx/postgres/ddl/082_ipos.sql
 
       - name: Verify table counts
         env:
@@ -157,14 +224,25 @@ jobs:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
         run: |
-          curl -s -X DELETE \
-            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${{ steps.neon-branch.outputs.branch_id }}" \
-            -H "Authorization: Bearer ${NEON_API_KEY}"
+          BRANCH_ID="${{ steps.neon-branch.outputs.branch_id }}"
+          if [ -n "$BRANCH_ID" ]; then
+            curl -s -X DELETE \
+              "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}" \
+              -H "Authorization: Bearer ${NEON_API_KEY}"
+            echo "Deleted branch: $BRANCH_ID"
+          fi
 
+  # ------------------------------------------------------------------
+  # Schema diff comment — only on PRs with SQL changes, skip bots
+  # ------------------------------------------------------------------
   schema-diff:
     name: Post Schema Diff as PR Comment
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: changed-files
+    if: |
+      github.event_name == 'pull_request' &&
+      needs.changed-files.outputs.sql_changed == 'true' &&
+      github.actor != 'dependabot[bot]'
     permissions:
       pull-requests: write
     steps:
@@ -175,7 +253,8 @@ jobs:
       - name: Compute changed SQL files
         id: diff
         run: |
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.sql' | head -40)
+          CHANGED=$(git diff --name-only \
+            origin/${{ github.base_ref }}...HEAD -- '*.sql' | head -40)
           echo "files<<EOF" >> "$GITHUB_OUTPUT"
           echo "$CHANGED" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
@@ -187,24 +266,24 @@ jobs:
             const files = `${{ steps.diff.outputs.files }}`.trim()
             if (!files) return
             const body = `### SQL files changed in this PR\n\`\`\`\n${files}\n\`\`\``
-            const comments = await github.rest.issues.listComments({
+            const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
-              repo: context.repo.repo
+              repo: context.repo.repo,
             })
-            const existing = comments.data.find(c => c.body.startsWith('### SQL files changed'))
+            const existing = comments.find(c => c.body.startsWith('### SQL files changed'))
             if (existing) {
               await github.rest.issues.updateComment({
                 comment_id: existing.id,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body
+                body,
               })
             } else {
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body
+                body,
               })
             }
