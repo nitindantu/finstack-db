@@ -1,0 +1,96 @@
+name: Migrate — Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate-production:
+    name: Apply Migrations to Neon Production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://console.neon.tech
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Snapshot before migration
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+        run: |
+          # Create a named restore point branch before touching production
+          TAG="${GITHUB_REF_NAME}"
+          curl -s -X POST \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches" \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\": {\"name\": \"pre-release-${TAG}\"}}"
+          echo "Pre-release snapshot branch created: pre-release-${TAG}"
+
+      - name: Run shared schema migration
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f shared/postgres/migrations/001_create_schema.sql
+
+      - name: Run screenerx schema migration
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f screenerx/postgres/migrations/001_create_schema.sql
+
+      - name: Run quantnova schema migration
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f quantnova/postgres/migrations/001_create_schema.sql
+
+      - name: Run ndfl schema migration
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f ndfl/postgres/migrations/001_create_schema.sql
+
+      - name: Run v1.1.0 DDL migrations
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -f screenerx/postgres/ddl/080_market_indices.sql
+          psql "$DATABASE_URL" -f screenerx/postgres/ddl/081_fii_dii_activity.sql
+          psql "$DATABASE_URL" -f screenerx/postgres/ddl/082_ipos.sql
+
+      - name: Verify table counts
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "
+            SELECT table_schema, count(*) AS tables
+            FROM information_schema.tables
+            WHERE table_schema IN ('shared','screenerx','quantnova','ndfl')
+            GROUP BY 1 ORDER BY 1;"
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `PRODUCTION migration failed — ${{ github.ref_name }}`,
+              body: `**Production database migration failed.**\n\nTag: \`${{ github.ref_name }}\`\nCommit: ${{ github.sha }}\nWorkflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n⚠️ A pre-release snapshot branch \`pre-release-${{ github.ref_name }}\` was created on Neon before the migration. Use it for PITR if needed.`,
+              labels: ['critical', 'database', 'production']
+            })

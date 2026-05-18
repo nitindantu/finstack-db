@@ -1,0 +1,14 @@
+# All SQL migrations require core-team review
+*                                    @finstack/core-team
+
+# Schema-specific owners
+shared/                              @finstack/core-team
+screenerx/                           @finstack/core-team @finstack/screenerx-team
+quantnova/                           @finstack/core-team @finstack/quantnova-team
+ndfl/                                @finstack/core-team @finstack/ndfl-team
+
+# CI/CD — core team only
+.github/                             @finstack/core-team
+
+# Docs
+docs/                                @finstack/core-team
