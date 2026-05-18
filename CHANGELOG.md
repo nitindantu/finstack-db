@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/nitindantu/finstack-db/compare/v1.0.2...v1.1.0) (2026-05-18)
+
+
+### Features
+
+* **schema:** add AI financial platform tables (083-091, 014-015) ([65480c9](https://github.com/nitindantu/finstack-db/commit/65480c9da75e83978545bfb934d243cc72a2f45b))
+
 ## [1.0.2](https://github.com/nitindantu/finstack-db/compare/v1.0.1...v1.0.2) (2026-05-18)
 
 
