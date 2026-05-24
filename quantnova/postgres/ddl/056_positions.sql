@@ -1,6 +1,7 @@
 -- ============================================================
 -- Table: positions
 -- Domain: Trading
+-- Updated: v1.4.0 — added M2M and realised/unrealised PnL breakdown
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS quantnova.positions (
@@ -15,6 +16,12 @@ CREATE TABLE IF NOT EXISTS quantnova.positions (
     pnl_pct             NUMERIC(10,4),
     overnight_quantity  NUMERIC(18,6)   NOT NULL DEFAULT 0,
     day_quantity        NUMERIC(18,6)   NOT NULL DEFAULT 0,
+    -- v1.4.0: Kite live PnL breakdown
+    m2m                 NUMERIC(20,2)   NOT NULL DEFAULT 0,
+    realised_pnl        NUMERIC(20,2)   NOT NULL DEFAULT 0,
+    unrealised_pnl      NUMERIC(20,2)   NOT NULL DEFAULT 0,
+    multiplier          INTEGER         NOT NULL DEFAULT 1,
+    close_price         NUMERIC(18,6)   CHECK (close_price IS NULL OR close_price >= 0),
     metadata            JSONB           NOT NULL DEFAULT '{}',
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -28,3 +35,8 @@ CREATE TABLE IF NOT EXISTS quantnova.positions (
 COMMENT ON TABLE positions IS 'Real-time broker positions synced from the broker API';
 COMMENT ON COLUMN positions.overnight_quantity IS 'Quantity carried overnight from the previous session';
 COMMENT ON COLUMN positions.day_quantity IS 'Quantity traded intraday in the current session';
+COMMENT ON COLUMN positions.m2m IS 'Mark-to-market PnL at last tick price (resets to 0 at session start)';
+COMMENT ON COLUMN positions.realised_pnl IS 'PnL locked in from closed legs today';
+COMMENT ON COLUMN positions.unrealised_pnl IS 'Floating PnL on open quantity at current market price';
+COMMENT ON COLUMN positions.multiplier IS 'Contract multiplier for F&O positions (1 for equity)';
+COMMENT ON COLUMN positions.close_price IS 'Previous session close price used for M2M base calculation';

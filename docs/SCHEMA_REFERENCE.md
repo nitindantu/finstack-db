@@ -1,13 +1,150 @@
 # Schema Reference
 
-Complete table-by-table reference for all 105 tables across the four PostgreSQL schemas.
+Complete table-by-table reference for all 111 tables across the four PostgreSQL schemas.
 
 ## Table of Contents
 
 - [shared schema (15 tables)](#shared-schema)
-- [screenerx schema (59 tables)](#screenerx-schema)
+- [screenerx schema (65 tables)](#screenerx-schema)
 - [quantnova schema (23 tables)](#quantnova-schema)
 - [ndfl schema (8 tables)](#ndfl-schema)
+
+## Trading Engine Tables (v1.4.0)
+
+These 6 tables were added in **v1.4.0** to support the Native Trade Execution Engine (Zerodha Kite Connect integration). All live in the `screenerx` schema.
+
+### screenerx.broker_sessions
+
+**Purpose:** One encrypted Kite Connect access token per broker account per day. Tokens expire at 06:00 IST daily. Only one `is_active = TRUE` row may exist per `broker_account_id` (enforced by partial unique index).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Unique session identifier |
+| `broker_account_id` | UUID | NOT NULL, FK → `quantnova.broker_accounts.id` CASCADE | Linked broker account |
+| `request_token` | VARCHAR(255) | | Kite OAuth request token (used only during login flow) |
+| `access_token_encrypted` | TEXT | NOT NULL | Fernet AES-128 encrypted Kite access token — never plaintext |
+| `public_token` | VARCHAR(255) | | Kite public token for websocket auth |
+| `login_time` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | OAuth login timestamp |
+| `token_expiry` | TIMESTAMPTZ | NOT NULL | UTC 00:30 (= 06:00 IST); tokens expire daily |
+| `is_active` | BOOLEAN | NOT NULL, DEFAULT TRUE | FALSE once logged out or superseded |
+| `metadata` | JSONB | NOT NULL, DEFAULT `{}` | Extensible metadata |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Row creation time |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | Last update time |
+
+**Indexes:** Partial unique on `(broker_account_id) WHERE is_active = TRUE`; `(broker_account_id, created_at DESC)`
+
+---
+
+### screenerx.order_executions
+
+**Purpose:** Individual fill records for each order. Multiple rows per order are normal for partial fills. Insert-only — rows are never updated after creation.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Unique execution identifier |
+| `order_id` | UUID | NOT NULL, FK → `quantnova.orders.id` CASCADE | Parent order |
+| `broker_account_id` | UUID | NOT NULL, FK → `quantnova.broker_accounts.id` | Executing broker account |
+| `fill_qty` | NUMERIC(18,6) | NOT NULL, > 0 | Quantity filled in this execution |
+| `fill_price` | NUMERIC(18,6) | NOT NULL, > 0 | Fill price for this execution |
+| `exchange_time` | TIMESTAMPTZ | | Exchange-reported execution timestamp |
+| `exchange_order_id` | VARCHAR(100) | | Exchange-assigned order ID |
+| `trade_id` | VARCHAR(100) | | Exchange-assigned trade ID |
+| `metadata` | JSONB | NOT NULL, DEFAULT `{}` | Broker-specific execution metadata |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Row creation time (insert-only) |
+
+**Indexes:** `(order_id)`; `(broker_account_id, created_at DESC)`
+
+---
+
+### screenerx.baskets
+
+**Purpose:** Named collections of orders executed together as one atomic unit (best-effort — partial execution is tracked). `metadata.broker_account_id` stores which account to execute against.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Unique basket identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id` CASCADE | Owning user |
+| `name` | VARCHAR(255) | NOT NULL | User-defined basket name |
+| `description` | TEXT | | Optional description |
+| `status` | VARCHAR(25) | NOT NULL, DEFAULT `'draft'` | `draft` / `executing` / `executed` / `partially_executed` / `failed` |
+| `executed_at` | TIMESTAMPTZ | | Timestamp when execution completed |
+| `metadata` | JSONB | NOT NULL, DEFAULT `{}` | Includes `broker_account_id` |
+| `created_at` / `updated_at` | TIMESTAMPTZ | NOT NULL | Standard audit timestamps |
+
+**Indexes:** `(user_id, created_at DESC)`
+
+---
+
+### screenerx.basket_items
+
+**Purpose:** Individual order legs within a basket. Executed sequentially in `sort_order` order with 100 ms delay between legs.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Unique item identifier |
+| `basket_id` | UUID | NOT NULL, FK → `screenerx.baskets.id` CASCADE | Parent basket |
+| `symbol_id` | UUID | FK → `screenerx.symbols.id` | Target instrument (nullable for late lookup) |
+| `side` | VARCHAR(4) | NOT NULL, `buy` or `sell` | Order direction |
+| `quantity` | NUMERIC(18,6) | NOT NULL, > 0 | Order quantity |
+| `order_type` | VARCHAR(20) | NOT NULL, DEFAULT `'market'` | Order type |
+| `price` | NUMERIC(18,6) | | Limit price (required for LIMIT orders) |
+| `trigger_price` | NUMERIC(18,6) | | Trigger price (required for SL orders) |
+| `product_type` | VARCHAR(20) | NOT NULL, DEFAULT `'intraday'` | `intraday` / `delivery` / `futures` / `options` |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT `'pending'` | `pending` / `placed` / `filled` / `failed` / `skipped` |
+| `order_id` | UUID | FK → `quantnova.orders.id` SET NULL | Populated once the leg is placed |
+| `error_msg` | TEXT | | Error message if leg failed |
+| `sort_order` | INTEGER | NOT NULL, DEFAULT 0 | Execution sequence |
+| `metadata` | JSONB | NOT NULL, DEFAULT `{}` | Extensible metadata |
+
+**Indexes:** `(basket_id, sort_order)`
+
+---
+
+### screenerx.gtt_orders
+
+**Purpose:** Mirror of GTT (Good-Till-Triggered) orders created on Zerodha Kite Connect. `kite_gtt_id` is the integer ID from the Kite API. `trigger_values` and `orders` are stored as JSONB matching Kite's API structure.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Unique GTT identifier |
+| `user_id` | UUID | NOT NULL, FK → `shared.users.id` CASCADE | Owning user |
+| `broker_account_id` | UUID | NOT NULL, FK → `quantnova.broker_accounts.id` | Executing broker account |
+| `symbol_id` | UUID | NOT NULL, FK → `screenerx.symbols.id` | Target instrument |
+| `trigger_type` | VARCHAR(10) | NOT NULL, DEFAULT `'single'` | `single` / `oco` (one-cancels-other) |
+| `trigger_values` | JSONB | NOT NULL, DEFAULT `[]` | e.g. `[1800.00]` for single; `[1700.00, 1900.00]` for OCO |
+| `orders` | JSONB | NOT NULL, DEFAULT `[]` | Order specs as per Kite GTT API |
+| `kite_gtt_id` | BIGINT | | Kite API integer ID (NULL until synced) |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT `'active'` | `active` / `triggered` / `cancelled` / `expired` / `disabled` |
+| `metadata` | JSONB | NOT NULL, DEFAULT `{}` | Extensible metadata |
+| `created_at` / `updated_at` | TIMESTAMPTZ | NOT NULL | Standard audit timestamps |
+
+**Indexes:** `(user_id, status, created_at DESC)`; `(broker_account_id)`; `(kite_gtt_id) WHERE NOT NULL`
+
+---
+
+### screenerx.trading_audit_logs
+
+**Purpose:** Tamper-resistant, insert-only compliance audit trail. Every order action, basket execution, GTT change, session event, and RMS check result is recorded here. **No `updated_at` column — rows are immutable by design.** Never UPDATE or DELETE rows from this table.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Unique log entry identifier |
+| `user_id` | UUID | NOT NULL | Acting user |
+| `broker_account_id` | UUID | | Broker account in scope (nullable for session events) |
+| `action` | VARCHAR(50) | NOT NULL | `order_place` / `order_modify` / `order_cancel` / `order_fill` / `basket_execute` / `gtt_create` / `gtt_cancel` / `session_connect` / `session_disconnect` / `rms_check_pass` / `rms_check_block` / `kill_switch_activate` |
+| `entity_type` | VARCHAR(30) | NOT NULL | `order` / `basket` / `basket_item` / `gtt` / `session` / `rms` / `kill_switch` |
+| `entity_id` | VARCHAR(255) | | UUID of the affected entity |
+| `before_state` | JSONB | DEFAULT `{}` | Entity state before the action |
+| `after_state` | JSONB | DEFAULT `{}` | Entity state after the action |
+| `ip_address` | INET | | Client IP address |
+| `user_agent` | TEXT | | HTTP User-Agent |
+| `outcome` | VARCHAR(20) | NOT NULL, DEFAULT `'success'` | `success` / `failure` / `blocked` / `partial` |
+| `rms_checks` | JSONB | DEFAULT `[]` | Array of RMS check results: `[{check, passed, value, limit}]` |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Immutable creation timestamp |
+
+**Indexes:** `(user_id, created_at DESC)`; `(entity_type, entity_id)`; `(action, created_at DESC)`; `(broker_account_id, created_at DESC) WHERE NOT NULL`
+
+---
 
 ## AI Platform Tables (v1.3.0)
 

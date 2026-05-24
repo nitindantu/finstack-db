@@ -1,6 +1,7 @@
 -- ============================================================
 -- Table: broker_accounts
 -- Domain: Trading
+-- Updated: v1.4.0 — added broker_type, client_id, last_synced_at
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS quantnova.broker_accounts (
@@ -14,6 +15,10 @@ CREATE TABLE IF NOT EXISTS quantnova.broker_accounts (
     is_active               BOOLEAN         NOT NULL DEFAULT TRUE,
     balance                 NUMERIC(20,2)   NOT NULL DEFAULT 0,
     margin_available        NUMERIC(20,2)   NOT NULL DEFAULT 0,
+    -- v1.4.0: broker identity and sync tracking
+    broker_type             VARCHAR(50)     NOT NULL DEFAULT 'zerodha',
+    client_id               VARCHAR(50),
+    last_synced_at          TIMESTAMPTZ,
     metadata                JSONB           NOT NULL DEFAULT '{}',
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -32,3 +37,6 @@ COMMENT ON COLUMN broker_accounts.api_key_encrypted IS 'AES-256-GCM encrypted br
 COMMENT ON COLUMN broker_accounts.api_secret_encrypted IS 'AES-256-GCM encrypted broker API secret';
 COMMENT ON COLUMN broker_accounts.balance IS 'Available cash balance as last synced from broker';
 COMMENT ON COLUMN broker_accounts.margin_available IS 'Available margin/leverage as last synced from broker';
+COMMENT ON COLUMN broker_accounts.broker_type IS 'Broker integration type: zerodha | upstox | angelone';
+COMMENT ON COLUMN broker_accounts.client_id IS 'Broker-assigned client ID (e.g. Zerodha user ID like ZA1234)';
+COMMENT ON COLUMN broker_accounts.last_synced_at IS 'Timestamp of last successful positions/orders sync from broker API';

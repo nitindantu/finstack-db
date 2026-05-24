@@ -11,6 +11,7 @@ Redis keys in the `screenerx` domain cover:
 - Market rankings (top gainers, losers, volume)
 - WebSocket pub/sub channels
 - AI platform caches: market intelligence summaries (2hr TTL), recommendation refresh rate-limiting (v1.3.0)
+- **Trading engine** (v1.4.0): live tick pub/sub, order update streaming, RMS kill switch, order dedup, rate limiting
 
 All keys follow: `{namespace}:{entity_type}:{identifier}`
 
@@ -191,4 +192,88 @@ Value:   {"compositeScore": 74, "grade": "B", "subScores": {...}, "computedAt": 
 TTL:     3600 seconds (1 hour)
 Note:    Invalidated immediately when portfolio, goals, or risk profile changes.
 Example: ai:health-score:a1b2c3d4-0001-4000-8000-000000000001
+```
+
+---
+
+## Trading Engine Keys (v1.4.0) — Redis DB 5
+
+> **Note:** The trading engine uses a dedicated Redis logical DB (DB 5) to avoid key collisions with the main application (DB 0). Celery workers use DB 3 (broker) and DB 4 (results).
+
+### Kill Switch
+```
+Key:     kill:{user_id}
+Type:    String ("1")
+TTL:     None (manual deletion only via DELETE /rms/kill-switch)
+Note:    Presence of this key blocks ALL order placement for the user.
+         Set by POST /rms/kill-switch; removed by DELETE /rms/kill-switch.
+Example: kill:a1b2c3d4-0001-4000-8000-000000000001
+```
+
+### Order Deduplication
+```
+Key:     dedup:{user_id}:{broker_account_id}:{symbol}:{side}:{quantity}
+Type:    String ("1")
+TTL:     2 seconds
+Note:    Set atomically (SETNX) before placing an order. Prevents duplicate
+         orders from rapid UI double-clicks or network retries within 2 seconds.
+Example: dedup:a1b2c3d4:ba001234:INFY:buy:50
+```
+
+### Order Rate Limiter
+```
+Key:     ratelimit:orders:{user_id}
+Type:    String (integer counter, INCR)
+TTL:     1 second (sliding window, refreshed each second)
+Note:    Max 10 increments per second. 429 returned if exceeded.
+Example: ratelimit:orders:a1b2c3d4-0001-4000-8000-000000000001
+```
+
+### Daily Loss Tracking
+```
+Key:     daily:pnl:{user_id}:{date}
+Type:    String (INCRBYFLOAT, negative for losses)
+TTL:     86400 seconds (expires at midnight IST next day)
+Note:    Updated on every order fill. Read by RMS max_daily_loss check.
+Example: daily:pnl:a1b2c3d4-0001-4000-8000-000000000001:2026-05-24
+```
+
+### Live Tick Pub/Sub (KiteTicker → Frontend WebSocket)
+```
+Channel: ticks:{user_id}
+Message: JSON array of tick objects
+         [{"token": 408065, "ltp": 1845.50, "bid": 1845.40, "ask": 1845.60,
+           "volume": 1234567, "oi": 0, "timestamp": "2026-05-24T09:16:00+05:30"}]
+Note:    Published by kite_ws.py on_ticks callback.
+         Subscribed by WebSocket /ws/trades handler per connected user.
+         One channel per user — multiplexes all subscribed instrument tokens.
+```
+
+### Order Update Pub/Sub (Kite postback → Frontend)
+```
+Channel: order_updates:{user_id}
+Message: JSON order update object
+         {"order_id": "...", "kite_order_id": "...", "status": "complete",
+          "filled_qty": 50, "average_price": 1845.50, "exchange_time": "..."}
+Note:    Published on order placement (trading engine) and KiteTicker
+         on_order_update callback. Frontend WebSocket relays to client.
+```
+
+### Kite Instrument Token Cache
+```
+Key:     kite:token:{exchange}:{symbol}
+Type:    String (integer instrument token)
+TTL:     86400 seconds (refreshed daily at 8 AM IST)
+Note:    Maps exchange+symbol → Kite instrument token for tick subscription.
+Example: kite:token:NSE:INFY  →  408065
+```
+
+### Kite Session Pool Heartbeat
+```
+Key:     kite:session:active:{broker_account_id}
+Type:    String ("1")
+TTL:     600 seconds (10 minutes; refreshed on API call success)
+Note:    Absence indicates the in-memory KiteConnect pool entry should be
+         reloaded from broker_sessions table on next request.
+Example: kite:session:active:ba001234-0000-4000-8000-000000000001
 ```

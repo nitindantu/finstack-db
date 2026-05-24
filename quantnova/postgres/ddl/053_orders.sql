@@ -1,6 +1,7 @@
 -- ============================================================
 -- Table: orders
 -- Domain: Trading
+-- Updated: v1.4.0 — added Kite Connect and iceberg columns
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS quantnova.orders (
@@ -24,6 +25,15 @@ CREATE TABLE IF NOT EXISTS quantnova.orders (
     placed_at               TIMESTAMPTZ,
     executed_at             TIMESTAMPTZ,
     cancelled_at            TIMESTAMPTZ,
+    -- v1.4.0: Kite Connect execution fields
+    average_price           NUMERIC(18,6)   CHECK (average_price IS NULL OR average_price > 0),
+    filled_qty              NUMERIC(18,6)   NOT NULL DEFAULT 0 CHECK (filled_qty >= 0),
+    exchange_time           TIMESTAMPTZ,
+    kite_order_id           VARCHAR(100),
+    tag                     VARCHAR(100),
+    -- v1.4.0: Iceberg order fields
+    iceberg_legs            INTEGER         CHECK (iceberg_legs IS NULL OR iceberg_legs > 0),
+    iceberg_qty             NUMERIC(18,6)   CHECK (iceberg_qty IS NULL OR iceberg_qty > 0),
     metadata                JSONB           NOT NULL DEFAULT '{}',
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -53,3 +63,8 @@ COMMENT ON COLUMN orders.order_type IS 'market/limit/stop/stop_limit/bracket/cov
 COMMENT ON COLUMN orders.product_type IS 'Margin product classification: intraday/delivery/futures/options';
 COMMENT ON COLUMN orders.disclosed_qty IS 'Iceberg order visible quantity; NULL means full quantity disclosed';
 COMMENT ON COLUMN orders.parent_order_id IS 'For bracket/cover legs referencing the parent order';
+COMMENT ON COLUMN orders.kite_order_id IS 'Zerodha Kite exchange-assigned order ID';
+COMMENT ON COLUMN orders.filled_qty IS 'Cumulative quantity filled so far (0 until partially/fully executed)';
+COMMENT ON COLUMN orders.average_price IS 'Volume-weighted average fill price across all executions';
+COMMENT ON COLUMN orders.iceberg_legs IS 'Number of iceberg slices; NULL means non-iceberg order';
+COMMENT ON COLUMN orders.iceberg_qty IS 'Visible quantity per iceberg slice';

@@ -2,6 +2,132 @@
 
 ---
 
+## v1.4.0 — 2026-05-24
+
+### Overview
+
+Native Trade Execution Engine — 6 new `screenerx` tables (092–097) and additive column additions to 3 existing `quantnova` tables, enabling full Zerodha Kite Connect integration: OAuth session management, encrypted token storage, pre-trade RMS, basket orders, GTT orders, and an insert-only compliance audit trail.
+
+---
+
+### New Tables — screenerx schema
+
+| Migration | Table | Purpose |
+|-----------|-------|---------|
+| `092_broker_sessions.sql` | `screenerx.broker_sessions` | Encrypted Kite access tokens (one active per broker account) |
+| `093_order_executions.sql` | `screenerx.order_executions` | Individual fill events (partial/full) per order |
+| `094_baskets.sql` | `screenerx.baskets` | Named multi-leg basket order collections |
+| `095_basket_items.sql` | `screenerx.basket_items` | Individual order legs within a basket |
+| `096_gtt_orders.sql` | `screenerx.gtt_orders` | Kite Good-Till-Triggered order mirror |
+| `097_trading_audit_logs.sql` | `screenerx.trading_audit_logs` | Insert-only compliance audit trail |
+
+---
+
+### Altered Tables — quantnova schema
+
+All changes are additive (new columns only). Applied via `quantnova/postgres/migrations/002_trading_engine_alterations.sql`.
+
+#### `quantnova.orders` — 7 new columns
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `average_price` | NUMERIC(18,6) | Volume-weighted average fill price |
+| `filled_qty` | NUMERIC(18,6) | Cumulative quantity filled (0 until executed) |
+| `exchange_time` | TIMESTAMPTZ | Exchange-reported execution timestamp |
+| `kite_order_id` | VARCHAR(100) | Zerodha Kite exchange-assigned order ID |
+| `tag` | VARCHAR(100) | User-defined order tag for grouping/analytics |
+| `iceberg_legs` | INTEGER | Number of iceberg slices (NULL = non-iceberg) |
+| `iceberg_qty` | NUMERIC(18,6) | Visible quantity per iceberg slice |
+
+#### `quantnova.positions` — 5 new columns
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `m2m` | NUMERIC(20,2) | Mark-to-market PnL at last tick price |
+| `realised_pnl` | NUMERIC(20,2) | PnL locked in from closed legs today |
+| `unrealised_pnl` | NUMERIC(20,2) | Floating PnL on open quantity |
+| `multiplier` | INTEGER | Contract multiplier for F&O (1 for equity) |
+| `close_price` | NUMERIC(18,6) | Previous session close for M2M base |
+
+#### `quantnova.broker_accounts` — 3 new columns
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `broker_type` | VARCHAR(50) | Integration type: `zerodha` / `upstox` / `angelone` |
+| `client_id` | VARCHAR(50) | Broker-assigned client ID (e.g. Zerodha user ID) |
+| `last_synced_at` | TIMESTAMPTZ | Timestamp of last successful broker API sync |
+
+---
+
+### New Migration Files
+
+| File | Purpose |
+|------|---------|
+| `screenerx/postgres/migrations/002_trading_engine.sql` | Runs DDL 092–097 via `\ir` includes |
+| `quantnova/postgres/migrations/002_trading_engine_alterations.sql` | ALTER TABLE statements for orders/positions/broker_accounts |
+
+---
+
+### New Application Components
+
+| Component | Description |
+|-----------|-------------|
+| `apps/trading-engine/` | FastAPI microservice on port 8001 |
+| `apps/trading-engine/app/services/kite_client.py` | KiteConnect pool with Fernet token decryption |
+| `apps/trading-engine/app/services/rms_service.py` | Pre-trade RMS: kill switch, dedup, daily loss, position size, leverage, fat finger, circuit breaker |
+| `apps/trading-engine/app/services/kite_ws.py` | KiteTicker → Redis pub/sub (DB 5) → WebSocket fanout |
+| `apps/trading-engine/app/services/basket_service.py` | Sequential basket execution with partial-failure tracking |
+| `apps/backend/src/trading/` | NestJS TradingModule — thin HTTP proxy to trading-engine |
+
+---
+
+### Redis Key Additions (DB 5)
+
+| Key pattern | Type | Purpose |
+|-------------|------|---------|
+| `kill:{user_id}` | String | Kill switch — blocks all order placement |
+| `dedup:{user_id}:{account}:{symbol}:{side}:{qty}` | String | 2-second order dedup window |
+| `ratelimit:orders:{user_id}` | String | 10 orders/second rate cap |
+| `daily:pnl:{user_id}:{date}` | String | Day loss accumulator for RMS |
+| `ticks:{user_id}` | Pub/Sub | KiteTicker live tick stream per user |
+| `order_updates:{user_id}` | Pub/Sub | Order status updates per user |
+| `kite:token:{exchange}:{symbol}` | String | Instrument token cache |
+| `kite:session:active:{broker_account_id}` | String | Session pool heartbeat |
+
+See `screenerx/redis/key_schemas.md` § "Trading Engine Keys (v1.4.0)" for full documentation.
+
+---
+
+### Security Architecture
+
+| Control | Implementation |
+|---------|----------------|
+| Token encryption | Fernet AES-128-CBC + HMAC-SHA256; key in `ENCRYPTION_KEY` env var |
+| JWT validation | trading-engine reads same `JWT_SECRET` as NestJS |
+| Session isolation | `broker_sessions.broker_account_id` FK — cross-user access impossible |
+| Kill switch | Redis `kill:{user_id}` key; checked first in every RMS pass |
+| Idempotency | `X-Idempotency-Key` header; 60-second Redis dedup |
+| Audit trail | Insert-only `trading_audit_logs` with before/after state + RMS check results |
+
+---
+
+### Updated Database Object Counts
+
+| Category | v1.3.0 | v1.4.0 | Delta |
+|---|---|---|---|
+| Tables | 105 | 111 | +6 |
+| Columns (existing tables) | — | — | +15 |
+| Indexes | — | — | +12 |
+| Migration files | 2 | 4 | +2 |
+
+---
+
+### Breaking Changes
+
+None — all changes are additive.
+
+---
+
 ## v1.3.0 — 2026-05-18
 
 ### Overview
@@ -414,10 +540,12 @@ None — this is the initial release.
 
 ## Upcoming / Roadmap
 
-### v1.4.0 (planned)
+### v1.5.0 (planned)
 
 - Row-Level Security policies documented as explicit SQL in a dedicated `rls/` directory
 - `shared.tenant_configs` table for per-tenant feature flags
 - Elasticsearch index lifecycle management (ILM) policies for the `news` index
 - Kafka Connect configuration files for CDC from PostgreSQL to Elasticsearch
 - Real-time FII/DII feed integration (NSE bulk data API)
+- Options chain table: `screenerx.options_chain` for live Greeks and OI data
+- `screenerx.algo_strategies` table linking user-defined algos to the trading engine
