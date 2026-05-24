@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/nitindantu/finstack-db/compare/v1.1.0...v1.2.0) (2026-05-24)
+
+
+### Features
+
+* **screenerx,quantnova:** add trading engine tables and docs for v1.4.0 ([7a78859](https://github.com/nitindantu/finstack-db/commit/7a7885927989b5340e198fc76edcfa8dcda37de7))
+
 ## [1.3.0](https://github.com/nitindantu/finstack-db/compare/v1.2.0...v1.3.0) (2026-05-18)
 
 
