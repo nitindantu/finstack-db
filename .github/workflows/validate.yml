@@ -260,7 +260,7 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Post diff comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const files = `${{ steps.diff.outputs.files }}`.trim()
