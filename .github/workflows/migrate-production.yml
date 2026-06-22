@@ -17,7 +17,7 @@ jobs:
       name: production
       url: https://console.neon.tech
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install psql
         run: sudo apt-get install -y postgresql-client
